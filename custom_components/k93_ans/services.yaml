@@ -146,3 +146,38 @@ end_live_notification:
       example: "vacuum_kitchen"
       selector:
         text:
+
+delete_notification:
+  name: Delete notification
+  description: >-
+    Permanently deletes one notification from history. If it's still
+    outstanding (persistent and not yet acknowledged), its persistent
+    notification is dismissed and any pushed companion-app notification is
+    cleared first, so nothing is left dangling with no history entry behind
+    it.
+  fields:
+    notification_id:
+      name: Notification ID
+      description: The id of the notification to delete.
+      required: true
+      selector:
+        text:
+
+clear_history:
+  name: Clear history
+  description: >-
+    Deletes multiple notifications from history at once. By default only
+    ones that aren't still actively pending acknowledgement are removed
+    (the same rule the History section itself uses), so a still-outstanding
+    notification is never silently lost - set include_unacknowledged to
+    also delete those.
+  fields:
+    include_unacknowledged:
+      name: Include unacknowledged
+      description: >-
+        If true, also delete notifications that still require
+        acknowledgement and haven't gotten it yet.
+      required: false
+      default: false
+      selector:
+        boolean:

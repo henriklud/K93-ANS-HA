@@ -83,6 +83,27 @@ class NotificationStore:
         await self.async_save()
         return record
 
+    async def async_delete(self, notification_ids: list[str]) -> list[str]:
+        """Delete notifications by id. Returns the ids that actually existed and were removed."""
+        id_set = set(notification_ids)
+        deleted = [r["id"] for r in self._notifications if r["id"] in id_set]
+        if deleted:
+            self._notifications = [r for r in self._notifications if r["id"] not in id_set]
+            await self.async_save()
+        return deleted
+
+    def async_history_ids(self, include_unacknowledged: bool = False) -> list[str]:
+        """Return ids eligible for a "clear history" action.
+
+        By default only ids of notifications that aren't still actively pending acknowledgement -
+        the same (not requires_ack) or acknowledged rule the History section itself uses - so
+        clearing history never silently makes a still-outstanding notification disappear.
+        Pass include_unacknowledged=True to include everything instead.
+        """
+        if include_unacknowledged:
+            return [r["id"] for r in self._notifications]
+        return [r["id"] for r in self._notifications if not r["requires_ack"] or r["acknowledged"]]
+
     async def async_prune(self, max_records: int, retention_days: int) -> None:
         """Drop notifications older than retention_days, then cap to max_records."""
         cutoff = dt_util.utcnow() - timedelta(days=retention_days)

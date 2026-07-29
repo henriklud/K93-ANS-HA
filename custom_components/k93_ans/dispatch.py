@@ -19,6 +19,7 @@ from .const import (
     DEFAULT_CHANNEL,
     IMPORTANCE_LEVELS,
     IOS_INTERRUPTION_MAP,
+    SIGNAL_DELETED,
     SIGNAL_UPDATED,
 )
 from .models import NotificationRecord
@@ -271,3 +272,28 @@ async def async_acknowledge(
     await _clear_mobile_notifications(hass, record)
     async_dispatcher_send(hass, SIGNAL_UPDATED, record)
     return record
+
+
+async def async_delete_notifications(
+    hass: HomeAssistant, store: NotificationStore, notification_ids: list[str]
+) -> list[str]:
+    """Delete notifications from history, cleaning up any still-live bell/push first.
+
+    Used for both a single delete (one id) and "clear history" (many ids). Deleting a
+    notification that's still outstanding also dismisses its persistent_notification and
+    clears any pushed companion-app notification, the same as acknowledging would - otherwise
+    it'd disappear from history while leaving an orphaned bell entry or phone notification with
+    nothing behind it. Returns the ids that actually existed and were removed.
+    """
+    for notification_id in notification_ids:
+        record = store.async_get(notification_id)
+        if record is None:
+            continue
+        if record.get("persistent") and not record.get("acknowledged"):
+            persistent_notification.async_dismiss(hass, notification_id)
+        await _clear_mobile_notifications(hass, record)
+
+    deleted_ids = await store.async_delete(notification_ids)
+    if deleted_ids:
+        async_dispatcher_send(hass, SIGNAL_DELETED, deleted_ids)
+    return deleted_ids

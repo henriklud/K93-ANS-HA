@@ -21,16 +21,22 @@ from .const import (
     IMPORTANCE_LEVELS,
     MAX_ACTIONS,
 )
-from .dispatch import async_acknowledge
+from .dispatch import async_acknowledge, async_delete_notifications
 from .models import NotificationRecord
 from .store import NotificationStore
 
 SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_ACKNOWLEDGE = "acknowledge"
 SERVICE_END_LIVE_NOTIFICATION = "end_live_notification"
+SERVICE_DELETE_NOTIFICATION = "delete_notification"
+SERVICE_CLEAR_HISTORY = "clear_history"
 
 ACKNOWLEDGE_SCHEMA = vol.Schema({vol.Required("notification_id"): cv.string})
 END_LIVE_NOTIFICATION_SCHEMA = vol.Schema({vol.Required("live_id"): cv.string})
+DELETE_NOTIFICATION_SCHEMA = vol.Schema({vol.Required("notification_id"): cv.string})
+CLEAR_HISTORY_SCHEMA = vol.Schema(
+    {vol.Optional("include_unacknowledged", default=False): cv.boolean}
+)
 
 ACTION_SCHEMA = vol.Schema(
     {
@@ -138,6 +144,13 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
             return
         await async_acknowledge(hass, store, record["id"], "live_ended")
 
+    async def handle_delete_notification(call: ServiceCall) -> None:
+        await async_delete_notifications(hass, store, [call.data["notification_id"]])
+
+    async def handle_clear_history(call: ServiceCall) -> None:
+        ids = store.async_history_ids(call.data["include_unacknowledged"])
+        await async_delete_notifications(hass, store, ids)
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_SEND_NOTIFICATION,
@@ -156,6 +169,18 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
         handle_end_live_notification,
         schema=END_LIVE_NOTIFICATION_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_DELETE_NOTIFICATION,
+        handle_delete_notification,
+        schema=DELETE_NOTIFICATION_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CLEAR_HISTORY,
+        handle_clear_history,
+        schema=CLEAR_HISTORY_SCHEMA,
+    )
 
 
 def async_unregister_services(hass: HomeAssistant) -> None:
@@ -163,3 +188,5 @@ def async_unregister_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
     hass.services.async_remove(DOMAIN, SERVICE_ACKNOWLEDGE)
     hass.services.async_remove(DOMAIN, SERVICE_END_LIVE_NOTIFICATION)
+    hass.services.async_remove(DOMAIN, SERVICE_DELETE_NOTIFICATION)
+    hass.services.async_remove(DOMAIN, SERVICE_CLEAR_HISTORY)

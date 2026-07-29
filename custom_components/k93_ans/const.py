@@ -7,6 +7,7 @@ DOMAIN = "k93_ans"
 
 EVENT_NOTIFICATION = "k93_ans_notification"
 SIGNAL_UPDATED = "k93_ans_updated"
+SIGNAL_DELETED = "k93_ans_deleted"
 
 STORAGE_VERSION = 1
 STORAGE_KEY = "k93_ans_notifications"
