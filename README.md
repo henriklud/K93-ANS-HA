@@ -1,5 +1,10 @@
 # K93 ANS
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="custom_components/k93_ans/brand/dark_logo.png">
+  <img src="custom_components/k93_ans/brand/logo.png" alt="K93 ANS" height="60">
+</picture>
+
 A Home Assistant custom integration that centralizes notification handling: one entry point fans a
 notification out to configurable recipients and channels, optionally requires acknowledgement via
 the built-in persistent notification system, and keeps a JSON-backed history that a companion
@@ -151,6 +156,15 @@ with .NET GDI+ via a throwaway PowerShell script rather than hand-designed — r
 them with real artwork whenever you'd like a different look). There's no `dark_icon.png` — the
 badge already carries its own full-color background, so it reads fine on both light and dark
 surfaces without a separate variant.
+
+This `custom_components/k93_ans/brand/` location is also what HACS's own documentation now points
+to for a repository's brand assets, so no separate setup is needed for HACS. That said, HACS's own
+store/dashboard UI has an open, known gap as of this writing where it doesn't yet fall back to a
+repo's local brand images the way HA's Settings page does (it currently only checks its
+`data-v2.hacs.xyz` icon cache, which has nothing for a private custom repository) — tracked
+upstream as [hacs/integration#5171](https://github.com/hacs/integration/issues/5171). HA's own
+Settings → Devices & Services page is unaffected by this and already shows the icon correctly; only
+HACS's own repository list icon may lag until that's fixed.
 
 ## Translations
 
