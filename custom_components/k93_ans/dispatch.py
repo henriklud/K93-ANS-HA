@@ -75,6 +75,19 @@ def _resolve_image(record: NotificationRecord) -> str | None:
     return None
 
 
+def _create_persistent_notification(hass: HomeAssistant, record: NotificationRecord) -> None:
+    """Create (or, reusing the same notification_id, update in place) the HA persistent
+    notification for a record, embedding its image as markdown if it has one since
+    persistent_notification has no dedicated image field."""
+    message = record["message"]
+    image = _resolve_image(record)
+    if image:
+        message = f"{message}\n\n![]({image})"
+    persistent_notification.async_create(
+        hass, message, title=record["title"], notification_id=record["id"]
+    )
+
+
 def _build_notify_payload(record: NotificationRecord) -> dict[str, Any]:
     """Build a plain notify.* payload for a generic (non companion-app) target."""
     return {
@@ -194,18 +207,26 @@ async def async_handle_notification_event(
     record["recipients"] = deliveries
 
     if record.get("persistent"):
-        message = record["message"]
-        image = _resolve_image(record)
-        if image:
-            # persistent_notification renders markdown, so this is the only way to show the
-            # picture there - unlike the mobile_app payload, there's no dedicated image field.
-            message = f"{message}\n\n![]({image})"
-        persistent_notification.async_create(
-            hass, message, title=record["title"], notification_id=record["id"]
-        )
+        _create_persistent_notification(hass, record)
 
     await store.async_add(record)
     async_dispatcher_send(hass, SIGNAL_UPDATED, record)
+
+
+def async_restore_persistent_notifications(hass: HomeAssistant, store: NotificationStore) -> None:
+    """Recreate persistent_notifications for still-unacknowledged records after a restart.
+
+    HA's built-in persistent_notification system only lives in memory, so restarting HA clears
+    the bell entirely even though our own Store-backed history survives fine. Call this once at
+    setup, after the store has loaded, so anything still outstanding reappears in the bell using
+    the same notification_id it already had - it's exactly the same "create" call dispatch uses,
+    just replayed from history instead of triggered by a fresh event. Deliberately does NOT
+    re-dispatch to notify.* recipients: unlike persistent_notification, a companion app's pushed
+    notification isn't cleared by an HA restart, so re-sending it would just be a noisy duplicate.
+    """
+    for record in store.async_list():
+        if record.get("persistent") and not record.get("acknowledged"):
+            _create_persistent_notification(hass, record)
 
 
 async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationRecord) -> None:

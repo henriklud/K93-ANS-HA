@@ -16,7 +16,11 @@ from .const import (
     DOMAIN,
     EVENT_NOTIFICATION,
 )
-from .dispatch import async_acknowledge, async_handle_notification_event
+from .dispatch import (
+    async_acknowledge,
+    async_handle_notification_event,
+    async_restore_persistent_notifications,
+)
 from .services import async_register_services, async_unregister_services
 from .store import NotificationStore
 from .websocket_api import async_register_websocket_api
@@ -31,6 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up K93 ANS from a config entry."""
     store = NotificationStore(hass)
     await store.async_load()
+    async_restore_persistent_notifications(hass, store)
 
     async def _on_notification_event(event: Event) -> None:
         await async_handle_notification_event(hass, entry, store, event)
