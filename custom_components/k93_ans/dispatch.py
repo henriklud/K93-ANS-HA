@@ -60,6 +60,21 @@ def _is_home(hass: HomeAssistant, recipient: dict[str, Any]) -> bool:
     return state is not None and state.state == STATE_HOME
 
 
+def _resolve_image(record: NotificationRecord) -> str | None:
+    """The image (URL or HA-relative path, e.g. /local/...) to attach, if any.
+
+    Prefers the explicit `image` field. Falls back to a non-mdi `icon` for backward
+    compatibility with the earlier behavior where `icon` alone doubled as the picture.
+    """
+    image = record.get("image")
+    if image:
+        return image
+    icon = record.get("icon")
+    if icon and not icon.startswith("mdi:"):
+        return icon
+    return None
+
+
 def _build_notify_payload(record: NotificationRecord) -> dict[str, Any]:
     """Build a plain notify.* payload for a generic (non companion-app) target."""
     return {
@@ -86,11 +101,12 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
         data["persistent"] = True
 
     icon = record.get("icon")
-    if icon:
-        if icon.startswith("mdi:"):
-            data["notification_icon"] = icon
-        else:
-            data["image"] = icon
+    if icon and icon.startswith("mdi:"):
+        data["notification_icon"] = icon
+
+    image = _resolve_image(record)
+    if image:
+        data["image"] = image
 
     data.update(record.get("data") or {})  # caller-supplied extras win last
 
@@ -178,8 +194,14 @@ async def async_handle_notification_event(
     record["recipients"] = deliveries
 
     if record.get("persistent"):
+        message = record["message"]
+        image = _resolve_image(record)
+        if image:
+            # persistent_notification renders markdown, so this is the only way to show the
+            # picture there - unlike the mobile_app payload, there's no dedicated image field.
+            message = f"{message}\n\n![]({image})"
         persistent_notification.async_create(
-            hass, record["message"], title=record["title"], notification_id=record["id"]
+            hass, message, title=record["title"], notification_id=record["id"]
         )
 
     await store.async_add(record)

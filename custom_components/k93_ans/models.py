@@ -24,6 +24,7 @@ class NotificationRecord(TypedDict):
     title: str
     message: str
     icon: str | None
+    image: str | None
     channel: str
     importance: str
     actions: list[dict[str, str]]

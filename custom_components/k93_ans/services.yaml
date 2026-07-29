@@ -21,9 +21,25 @@ send_notification:
         text:
     icon:
       name: Icon
-      description: "An mdi: icon or an image URL."
+      description: >-
+        An mdi: icon shown as the notification's small icon/glyph. If it's
+        not an mdi: icon (and "image" is not set), it's used as the picture
+        instead, for backward compatibility - prefer the separate "image"
+        field for pictures going forward.
       required: false
       example: "mdi:door-open"
+      selector:
+        text:
+    image:
+      name: Image
+      description: >-
+        A picture to attach to the notification: an image URL, or an
+        HA-relative path such as /local/... or /api/camera_proxy/.... Shown
+        as the picture on companion-app push notifications, embedded in the
+        message (as markdown) when "persistent" is true, and shown as a
+        preview in the Lovelace card.
+      required: false
+      example: "/local/vacuum_map.jpg"
       selector:
         text:
     channel:
