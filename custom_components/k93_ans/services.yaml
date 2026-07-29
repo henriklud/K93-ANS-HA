@@ -81,6 +81,21 @@ send_notification:
       default: false
       selector:
         boolean:
+    live_id:
+      name: Live ID
+      description: >-
+        A stable id you choose (e.g. "vacuum_kitchen"). Calling
+        send_notification again with the same live_id updates that same
+        notification in place - same persistent notification, same phone
+        push (via a shared tag), same history row - instead of creating a
+        new one each time. Useful for a repeatedly-updated status
+        notification (e.g. live vacuum-cleaning stats/map). Call
+        end_live_notification with the same live_id when the live session
+        is over to dismiss and clear it everywhere.
+      required: false
+      example: "vacuum_kitchen"
+      selector:
+        text:
     source:
       name: Source
       description: Free-text label for what triggered this notification.
@@ -96,5 +111,22 @@ acknowledge:
       name: Notification ID
       description: The id of the notification to acknowledge.
       required: true
+      selector:
+        text:
+
+end_live_notification:
+  name: End live notification
+  description: >-
+    Ends a live notification started via send_notification's live_id field:
+    dismisses its persistent notification (if any), clears the pushed
+    notification on every companion-app recipient it reached, and marks it
+    acknowledged so it moves out of the Unacknowledged list. A no-op if no
+    active live notification exists for that live_id.
+  fields:
+    live_id:
+      name: Live ID
+      description: The live_id used in the send_notification calls to update.
+      required: true
+      example: "vacuum_kitchen"
       selector:
         text:

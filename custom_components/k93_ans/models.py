@@ -19,6 +19,8 @@ class NotificationRecord(TypedDict):
 
     id: str
     created: str
+    updated_at: str | None
+    live_id: str | None
     title: str
     message: str
     icon: str | None

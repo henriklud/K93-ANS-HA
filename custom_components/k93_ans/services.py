@@ -27,8 +27,10 @@ from .store import NotificationStore
 
 SERVICE_SEND_NOTIFICATION = "send_notification"
 SERVICE_ACKNOWLEDGE = "acknowledge"
+SERVICE_END_LIVE_NOTIFICATION = "end_live_notification"
 
 ACKNOWLEDGE_SCHEMA = vol.Schema({vol.Required("notification_id"): cv.string})
+END_LIVE_NOTIFICATION_SCHEMA = vol.Schema({vol.Required("live_id"): cv.string})
 
 ACTION_SCHEMA = vol.Schema(
     {
@@ -50,6 +52,7 @@ SEND_NOTIFICATION_SCHEMA = vol.Schema(
         vol.Optional("data", default=dict): dict,
         vol.Optional("target_recipients"): [cv.string],
         vol.Optional("home_only", default=False): cv.boolean,
+        vol.Optional("live_id"): cv.string,
         vol.Optional("source"): cv.string,
     }
 )
@@ -64,9 +67,18 @@ def _resolve_language(hass: HomeAssistant, entry: ConfigEntry) -> str:
     return "no" if hass_language.startswith(("nb", "nn", "no")) else "en"
 
 
-def _build_record(call: ServiceCall, ack_label: str) -> NotificationRecord:
-    """Build a notification record from a send_notification service call."""
-    notification_id = str(uuid.uuid4())
+def _build_record(
+    call: ServiceCall, ack_label: str, existing: NotificationRecord | None
+) -> NotificationRecord:
+    """Build a notification record from a send_notification service call.
+
+    If `existing` is given (a live notification being refreshed - see live_id), its id and
+    original creation time are reused instead of minting a new notification, so the store
+    update, the persistent_notification, and the companion-app tag all refer to the same
+    underlying notification and get updated in place rather than piling up duplicates.
+    """
+    notification_id = existing["id"] if existing else str(uuid.uuid4())
+    created = existing["created"] if existing else dt_util.utcnow().isoformat()
     actions = list(call.data["actions"])
     channel = call.data["channel"]
     persistent = call.data["persistent"]
@@ -81,7 +93,9 @@ def _build_record(call: ServiceCall, ack_label: str) -> NotificationRecord:
 
     return {
         "id": notification_id,
-        "created": dt_util.utcnow().isoformat(),
+        "created": created,
+        "updated_at": dt_util.utcnow().isoformat() if existing else None,
+        "live_id": call.data.get("live_id"),
         "title": call.data["title"],
         "message": call.data["message"],
         "icon": call.data.get("icon"),
@@ -108,11 +122,19 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
     async def handle_send_notification(call: ServiceCall) -> None:
         language = _resolve_language(hass, entry)
         ack_label = ACK_ACTION_LABELS.get(language, ACK_ACTION_LABELS["en"])
-        record = _build_record(call, ack_label)
+        live_id = call.data.get("live_id")
+        existing = store.async_get_by_live_id(live_id) if live_id else None
+        record = _build_record(call, ack_label, existing)
         hass.bus.async_fire(EVENT_NOTIFICATION, record)
 
     async def handle_acknowledge(call: ServiceCall) -> None:
         await async_acknowledge(hass, store, call.data["notification_id"], "service")
+
+    async def handle_end_live_notification(call: ServiceCall) -> None:
+        record = store.async_get_by_live_id(call.data["live_id"])
+        if record is None:
+            return
+        await async_acknowledge(hass, store, record["id"], "live_ended")
 
     hass.services.async_register(
         DOMAIN,
@@ -126,9 +148,16 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
         handle_acknowledge,
         schema=ACKNOWLEDGE_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_END_LIVE_NOTIFICATION,
+        handle_end_live_notification,
+        schema=END_LIVE_NOTIFICATION_SCHEMA,
+    )
 
 
 def async_unregister_services(hass: HomeAssistant) -> None:
     """Unregister K93 ANS services."""
     hass.services.async_remove(DOMAIN, SERVICE_SEND_NOTIFICATION)
     hass.services.async_remove(DOMAIN, SERVICE_ACKNOWLEDGE)
+    hass.services.async_remove(DOMAIN, SERVICE_END_LIVE_NOTIFICATION)

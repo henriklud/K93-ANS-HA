@@ -28,7 +28,17 @@ class NotificationStore:
         await self._store.async_save({"notifications": self._notifications})
 
     async def async_add(self, record: NotificationRecord) -> None:
-        """Add a new notification record and persist it."""
+        """Add a new notification record, replacing one with the same id if it already exists.
+
+        The replace path is what makes "live" notifications (see live_id) work: repeated
+        send_notification calls for the same live_id reuse the same underlying id, so this
+        refreshes that one history entry instead of piling up a new row per update. The updated
+        record is (re)inserted at the front rather than left at its old position, so an actively
+        updating live notification keeps sorting as the most recent thing that happened instead
+        of sitting wherever it was first created - which matters because `async_list`'s `limit`
+        would otherwise let a still-live notification silently scroll out of a bounded fetch.
+        """
+        self._notifications = [r for r in self._notifications if r["id"] != record["id"]]
         self._notifications.insert(0, record)
         await self.async_save()
 
@@ -36,6 +46,13 @@ class NotificationStore:
         """Return a single notification by id, if present."""
         for record in self._notifications:
             if record["id"] == notification_id:
+                return record
+        return None
+
+    def async_get_by_live_id(self, live_id: str) -> NotificationRecord | None:
+        """Return the active (unacknowledged) live notification for live_id, if any."""
+        for record in self._notifications:
+            if record.get("live_id") == live_id and not record["acknowledged"]:
                 return record
         return None
 
