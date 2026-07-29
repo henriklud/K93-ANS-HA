@@ -1,0 +1,75 @@
+"""The K93 ANS notification integration."""
+from __future__ import annotations
+
+from datetime import timedelta
+
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import Event, HomeAssistant
+from homeassistant.helpers.event import async_track_time_interval
+
+from .const import (
+    ACK_ACTION_PREFIX,
+    CONF_HISTORY_MAX_RECORDS,
+    CONF_HISTORY_RETENTION_DAYS,
+    DEFAULT_HISTORY_MAX_RECORDS,
+    DEFAULT_HISTORY_RETENTION_DAYS,
+    DOMAIN,
+    EVENT_NOTIFICATION,
+)
+from .dispatch import async_acknowledge, async_handle_notification_event
+from .services import async_register_services, async_unregister_services
+from .store import NotificationStore
+from .websocket_api import async_register_websocket_api
+
+PLATFORMS: list[str] = []
+
+MOBILE_APP_ACTION_EVENT = "mobile_app_notification_action"
+PRUNE_INTERVAL = timedelta(hours=1)
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up K93 ANS from a config entry."""
+    store = NotificationStore(hass)
+    await store.async_load()
+
+    async def _on_notification_event(event: Event) -> None:
+        await async_handle_notification_event(hass, entry, store, event)
+
+    async def _on_mobile_action(event: Event) -> None:
+        action = event.data.get("action")
+        if isinstance(action, str) and action.startswith(ACK_ACTION_PREFIX):
+            notification_id = action[len(ACK_ACTION_PREFIX) :]
+            await async_acknowledge(hass, store, notification_id, "mobile_action")
+
+    async def _on_prune(_now) -> None:
+        await store.async_prune(
+            entry.options.get(CONF_HISTORY_MAX_RECORDS, DEFAULT_HISTORY_MAX_RECORDS),
+            entry.options.get(CONF_HISTORY_RETENTION_DAYS, DEFAULT_HISTORY_RETENTION_DAYS),
+        )
+
+    unsub_event = hass.bus.async_listen(EVENT_NOTIFICATION, _on_notification_event)
+    unsub_action = hass.bus.async_listen(MOBILE_APP_ACTION_EVENT, _on_mobile_action)
+    unsub_prune = async_track_time_interval(hass, _on_prune, PRUNE_INTERVAL)
+
+    hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN][entry.entry_id] = {
+        "store": store,
+        "unsub_event": unsub_event,
+        "unsub_action": unsub_action,
+        "unsub_prune": unsub_prune,
+    }
+
+    async_register_services(hass, entry, store)
+    async_register_websocket_api(hass, store)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a K93 ANS config entry."""
+    entry_data = hass.data[DOMAIN].pop(entry.entry_id, None)
+    if entry_data is not None:
+        entry_data["unsub_event"]()
+        entry_data["unsub_action"]()
+        entry_data["unsub_prune"]()
+    async_unregister_services(hass)
+    return True

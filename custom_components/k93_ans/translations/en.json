@@ -1,0 +1,71 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up K93 ANS",
+        "description": "K93 ANS centralizes notification handling: recipients, channels and history are configured afterwards from the integration's Configure options."
+      }
+    },
+    "abort": {
+      "already_configured": "K93 ANS is already configured. Only one instance is supported."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "K93 ANS",
+        "menu_options": {
+          "manage_recipients": "Manage recipients",
+          "manage_channels": "Manage channels",
+          "advanced": "Advanced",
+          "finish": "Done"
+        }
+      },
+      "manage_recipients": {
+        "title": "Manage recipients",
+        "data": {
+          "recipient": "Recipient"
+        }
+      },
+      "edit_recipient": {
+        "title": "Recipient",
+        "data": {
+          "name": "Name",
+          "notify_service": "Notify service",
+          "person_entity_id": "Person (optional - required for \"home only\" notifications)",
+          "min_importance": "Minimum importance",
+          "allowed_channels": "Allowed channels (empty = all)",
+          "enabled": "Enabled",
+          "remove": "Remove this recipient"
+        }
+      },
+      "manage_channels": {
+        "title": "Manage channels",
+        "data": {
+          "channel": "Channel"
+        }
+      },
+      "edit_channel": {
+        "title": "Channel",
+        "data": {
+          "key": "Key",
+          "name": "Name",
+          "min_importance": "Minimum importance",
+          "enabled": "Enabled",
+          "remove": "Remove this channel"
+        }
+      },
+      "advanced": {
+        "title": "Advanced",
+        "data": {
+          "history_retention_days": "History retention (days)",
+          "history_max_records": "History max records",
+          "language": "Language (used for outgoing notification text, e.g. the Acknowledge action button)"
+        }
+      }
+    },
+    "error": {
+      "duplicate_key": "A channel with this key already exists."
+    }
+  }
+}

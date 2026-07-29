@@ -1,0 +1,71 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sett opp K93 ANS",
+        "description": "K93 ANS sentraliserer varslingshåndtering: mottakere, kanaler og historikk konfigureres etterpå fra integrasjonens Konfigurer-innstillinger."
+      }
+    },
+    "abort": {
+      "already_configured": "K93 ANS er allerede konfigurert. Kun én instans støttes."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "K93 ANS",
+        "menu_options": {
+          "manage_recipients": "Administrer mottakere",
+          "manage_channels": "Administrer kanaler",
+          "advanced": "Avansert",
+          "finish": "Ferdig"
+        }
+      },
+      "manage_recipients": {
+        "title": "Administrer mottakere",
+        "data": {
+          "recipient": "Mottaker"
+        }
+      },
+      "edit_recipient": {
+        "title": "Mottaker",
+        "data": {
+          "name": "Navn",
+          "notify_service": "Varslingstjeneste",
+          "person_entity_id": "Person (valgfritt - kreves for \"kun hjemme\"-varsler)",
+          "min_importance": "Minimum viktighet",
+          "allowed_channels": "Tillatte kanaler (tom = alle)",
+          "enabled": "Aktivert",
+          "remove": "Fjern denne mottakeren"
+        }
+      },
+      "manage_channels": {
+        "title": "Administrer kanaler",
+        "data": {
+          "channel": "Kanal"
+        }
+      },
+      "edit_channel": {
+        "title": "Kanal",
+        "data": {
+          "key": "Nøkkel",
+          "name": "Navn",
+          "min_importance": "Minimum viktighet",
+          "enabled": "Aktivert",
+          "remove": "Fjern denne kanalen"
+        }
+      },
+      "advanced": {
+        "title": "Avansert",
+        "data": {
+          "history_retention_days": "Lagringstid for historikk (dager)",
+          "history_max_records": "Maks antall i historikk",
+          "language": "Språk (brukt for utgående varslingstekst, f.eks. Bekreft-knappen)"
+        }
+      }
+    },
+    "error": {
+      "duplicate_key": "En kanal med denne nøkkelen finnes allerede."
+    }
+  }
+}

@@ -1,0 +1,100 @@
+send_notification:
+  name: Send notification
+  description: >-
+    Sends a notification through K93 ANS. It is fanned out to configured
+    recipients and channels according to their filters, and optionally
+    created as a persistent notification requiring acknowledgement.
+  fields:
+    title:
+      name: Title
+      description: Notification title.
+      required: true
+      example: "Front door opened"
+      selector:
+        text:
+    message:
+      name: Message
+      description: Notification message body.
+      required: true
+      example: "Front door sensor triggered while armed away"
+      selector:
+        text:
+    icon:
+      name: Icon
+      description: "An mdi: icon or an image URL."
+      required: false
+      example: "mdi:door-open"
+      selector:
+        text:
+    channel:
+      name: Channel
+      description: >-
+        Configured channel key. Built-in channels are info, alert, event,
+        reminder, security and system. Defaults to "default".
+      required: false
+      example: "security"
+      selector:
+        text:
+    importance:
+      name: Importance
+      description: Importance level.
+      required: false
+      default: "normal"
+      selector:
+        select:
+          options:
+            - "low"
+            - "normal"
+            - "high"
+            - "critical"
+    actions:
+      name: Actions
+      description: List of action buttons, each with "action" and "title" keys.
+      required: false
+      example: '[{"action": "OPEN_CAMERA", "title": "View Camera"}]'
+    persistent:
+      name: Persistent
+      description: >-
+        If true, requires acknowledgement via the built-in persistent
+        notification system.
+      required: false
+      default: false
+      selector:
+        boolean:
+    data:
+      name: Data
+      description: Arbitrary extra fields passed through to notify.* targets.
+      required: false
+    target_recipients:
+      name: Target recipients
+      description: >-
+        Restrict delivery to these configured recipient IDs only. Omit to
+        consider all recipients.
+      required: false
+    home_only:
+      name: Home only
+      description: >-
+        Only deliver to recipients whose assigned person entity is currently
+        "home". Recipients with no person assigned are unaffected and always
+        considered.
+      required: false
+      default: false
+      selector:
+        boolean:
+    source:
+      name: Source
+      description: Free-text label for what triggered this notification.
+      required: false
+      selector:
+        text:
+
+acknowledge:
+  name: Acknowledge
+  description: Marks a notification as acknowledged and dismisses its persistent notification, if any.
+  fields:
+    notification_id:
+      name: Notification ID
+      description: The id of the notification to acknowledge.
+      required: true
+      selector:
+        text:
