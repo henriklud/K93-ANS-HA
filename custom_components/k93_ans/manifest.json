@@ -8,5 +8,5 @@
   "issue_tracker": "https://github.com/henriklud/k93-ans/issues",
   "after_dependencies": ["mobile_app"],
   "requirements": [],
-  "version": "0.1.2"
+  "version": "0.1.14"
 }
