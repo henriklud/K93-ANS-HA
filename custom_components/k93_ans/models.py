@@ -41,6 +41,7 @@ class NotificationRecord(TypedDict):
     home_only: bool
     show_in_history: bool
     dismiss_on_action: bool
+    clear_on_acknowledge: bool
 
 
 class Recipient(TypedDict):

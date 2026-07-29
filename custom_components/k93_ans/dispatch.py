@@ -279,7 +279,8 @@ async def async_acknowledge(
         return None
     if record.get("persistent"):
         persistent_notification.async_dismiss(hass, notification_id)
-    await _clear_mobile_notifications(hass, record)
+    if record.get("clear_on_acknowledge", True):
+        await _clear_mobile_notifications(hass, record)
     async_dispatcher_send(hass, SIGNAL_UPDATED, record)
     return record
 

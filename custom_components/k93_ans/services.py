@@ -63,6 +63,7 @@ SEND_NOTIFICATION_SCHEMA = vol.Schema(
         vol.Optional("source"): cv.string,
         vol.Optional("show_in_history", default=True): cv.boolean,
         vol.Optional("dismiss_on_action", default=False): cv.boolean,
+        vol.Optional("clear_on_acknowledge", default=True): cv.boolean,
     }
 )
 
@@ -125,6 +126,7 @@ def _build_record(
         "home_only": call.data["home_only"],
         "show_in_history": call.data["show_in_history"],
         "dismiss_on_action": call.data["dismiss_on_action"],
+        "clear_on_acknowledge": call.data["clear_on_acknowledge"],
     }
 
 

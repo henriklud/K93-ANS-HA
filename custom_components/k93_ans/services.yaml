@@ -143,6 +143,18 @@ send_notification:
       default: false
       selector:
         boolean:
+    clear_on_acknowledge:
+      name: Clear on acknowledge
+      description: >-
+        If true (default), acknowledging this notification - from the card,
+        the k93_ans.acknowledge service, or the phone's own Acknowledge
+        button - also clears the pushed notification on every companion-app
+        recipient it reached. Set to false to leave the phone notification
+        in place even after it's been acknowledged elsewhere.
+      required: false
+      default: true
+      selector:
+        boolean:
 
 acknowledge:
   name: Acknowledge
