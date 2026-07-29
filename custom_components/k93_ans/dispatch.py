@@ -2,14 +2,18 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from homeassistant.components import persistent_notification
+from homeassistant.components.persistent_notification import (
+    SIGNAL_PERSISTENT_NOTIFICATIONS_UPDATED,
+    UpdateType,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_HOME
-from homeassistant.core import Event, HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ServiceNotFound
-from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -110,6 +114,12 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
     }
     if record.get("actions"):
         data["actions"] = record["actions"]
+        # "sticky" keeps the companion app from dismissing the notification when the user
+        # interacts with it - without it, pressing an action button (e.g. a vacuum's
+        # Pause/Resume) closes the notification along with running the action. Default to
+        # keeping it open; `dismiss_on_action` opts back into the old auto-close behavior.
+        if not record.get("dismiss_on_action"):
+            data["sticky"] = True
     if record.get("persistent"):
         data["sticky"] = True
         data["persistent"] = True
@@ -272,6 +282,32 @@ async def async_acknowledge(
     await _clear_mobile_notifications(hass, record)
     async_dispatcher_send(hass, SIGNAL_UPDATED, record)
     return record
+
+
+def async_register_persistent_notification_listener(
+    hass: HomeAssistant, store: NotificationStore
+) -> Callable[[], None]:
+    """Acknowledge our own record when its persistent_notification is dismissed outside k93_ans.
+
+    HA's built-in notification drawer lets a user dismiss a persistent_notification directly -
+    that bypasses k93_ans.acknowledge, the card, and the mobile_app_notification_action listener
+    entirely, so without this the record would stay unacknowledged forever and the matching phone
+    push would never get cleared. Records our own acknowledge flow already dismissed are skipped
+    (they're already marked acknowledged by the time that dismiss fires this same signal), so this
+    doesn't loop back on itself.
+    """
+
+    @callback
+    def _on_update(update_type: UpdateType, notifications: dict[str, Any]) -> None:
+        if update_type != UpdateType.REMOVED:
+            return
+        for notification_id in notifications:
+            record = store.async_get(notification_id)
+            if record is None or not record.get("persistent") or record.get("acknowledged"):
+                continue
+            hass.async_create_task(async_acknowledge(hass, store, notification_id, "ha_ui"))
+
+    return async_dispatcher_connect(hass, SIGNAL_PERSISTENT_NOTIFICATIONS_UPDATED, _on_update)
 
 
 async def async_delete_notifications(

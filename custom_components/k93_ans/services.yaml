@@ -118,6 +118,31 @@ send_notification:
       required: false
       selector:
         text:
+    show_in_history:
+      name: Show in history
+      description: >-
+        If false, this notification is excluded from the card's History list
+        and ticker, and from the "stored"/"sent" diagnostic sensors. It's
+        still delivered, still counted in Unacknowledged while outstanding,
+        and can still be acknowledged/ended normally - use this for frequent
+        or transient updates (e.g. a live status notification) you don't
+        want cluttering history. Defaults to true.
+      required: false
+      default: true
+      selector:
+        boolean:
+    dismiss_on_action:
+      name: Dismiss on action
+      description: >-
+        If false (default), pressing an action button other than Acknowledge
+        (e.g. a vacuum's Pause/Resume) keeps the companion-app notification
+        open instead of closing it, by marking it "sticky". Set to true to
+        restore the old behavior where any action press dismisses the
+        notification. Ignored (always kept open) when "persistent" is true.
+      required: false
+      default: false
+      selector:
+        boolean:
 
 acknowledge:
   name: Acknowledge

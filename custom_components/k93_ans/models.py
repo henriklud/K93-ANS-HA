@@ -39,6 +39,8 @@ class NotificationRecord(TypedDict):
     source: str | None
     target_recipients: list[str] | None
     home_only: bool
+    show_in_history: bool
+    dismiss_on_action: bool
 
 
 class Recipient(TypedDict):

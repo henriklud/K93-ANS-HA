@@ -61,6 +61,8 @@ SEND_NOTIFICATION_SCHEMA = vol.Schema(
         vol.Optional("home_only", default=False): cv.boolean,
         vol.Optional("live_id"): cv.string,
         vol.Optional("source"): cv.string,
+        vol.Optional("show_in_history", default=True): cv.boolean,
+        vol.Optional("dismiss_on_action", default=False): cv.boolean,
     }
 )
 
@@ -121,6 +123,8 @@ def _build_record(
         "source": call.data.get("source"),
         "target_recipients": call.data.get("target_recipients"),
         "home_only": call.data["home_only"],
+        "show_in_history": call.data["show_in_history"],
+        "dismiss_on_action": call.data["dismiss_on_action"],
     }
 
 

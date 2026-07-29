@@ -19,13 +19,14 @@ from .const import (
 from .dispatch import (
     async_acknowledge,
     async_handle_notification_event,
+    async_register_persistent_notification_listener,
     async_restore_persistent_notifications,
 )
 from .services import async_register_services, async_unregister_services
 from .store import NotificationStore
 from .websocket_api import async_register_websocket_api
 
-PLATFORMS: list[str] = []
+PLATFORMS: list[str] = ["sensor"]
 
 MOBILE_APP_ACTION_EVENT = "mobile_app_notification_action"
 PRUNE_INTERVAL = timedelta(hours=1)
@@ -55,6 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_event = hass.bus.async_listen(EVENT_NOTIFICATION, _on_notification_event)
     unsub_action = hass.bus.async_listen(MOBILE_APP_ACTION_EVENT, _on_mobile_action)
     unsub_prune = async_track_time_interval(hass, _on_prune, PRUNE_INTERVAL)
+    unsub_persistent = async_register_persistent_notification_listener(hass, store)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
@@ -62,19 +64,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "unsub_event": unsub_event,
         "unsub_action": unsub_action,
         "unsub_prune": unsub_prune,
+        "unsub_persistent": unsub_persistent,
     }
 
     async_register_services(hass, entry, store)
     async_register_websocket_api(hass, store)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a K93 ANS config entry."""
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     entry_data = hass.data[DOMAIN].pop(entry.entry_id, None)
     if entry_data is not None:
         entry_data["unsub_event"]()
         entry_data["unsub_action"]()
         entry_data["unsub_prune"]()
+        entry_data["unsub_persistent"]()
     async_unregister_services(hass)
-    return True
+    return unload_ok
