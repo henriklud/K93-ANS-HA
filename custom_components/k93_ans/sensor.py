@@ -69,10 +69,10 @@ class K93AnsSensorBase(SensorEntity):
 
     async def async_added_to_hass(self) -> None:
         """Refresh immediately when a notification is added/updated/deleted, not just on poll."""
-        self.async_on_unload(
+        self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_UPDATED, self._handle_signal)
         )
-        self.async_on_unload(
+        self.async_on_remove(
             async_dispatcher_connect(self.hass, SIGNAL_DELETED, self._handle_signal)
         )
 
