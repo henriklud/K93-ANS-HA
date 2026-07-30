@@ -243,13 +243,35 @@ async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationR
     matching "tag" as a command to remove that specific notification, rather than show a new
     one - this is how an in-app/card acknowledgement also dismisses the phone's push banner.
     """
-    for delivery in (record.get("recipients") or {}).values():
+    recipients = record.get("recipients") or {}
+    _LOGGER.debug(
+        "K93 ANS clearing pushed notifications for %s: recipients=%s",
+        record["id"],
+        recipients,
+    )
+    for delivery in recipients.values():
         notify_service = delivery.get("notify_service")
         if not delivery.get("dispatched") or not notify_service:
+            _LOGGER.debug(
+                "K93 ANS skip clear for %s: dispatched=%s notify_service=%s",
+                record["id"],
+                delivery.get("dispatched"),
+                notify_service,
+            )
             continue
         if not _is_mobile_app_target(notify_service):
+            _LOGGER.debug(
+                "K93 ANS skip clear for %s: notify.%s is not a mobile_app target",
+                record["id"],
+                notify_service,
+            )
             continue
         try:
+            _LOGGER.debug(
+                "K93 ANS sending clear_notification to notify.%s for %s",
+                notify_service,
+                record["id"],
+            )
             await hass.services.async_call(
                 "notify",
                 notify_service,
@@ -273,8 +295,20 @@ async def async_acknowledge(
     record = await store.async_acknowledge(notification_id, via)
     if record is None:
         return None
+    _LOGGER.debug(
+        "K93 ANS acknowledge %s via=%s persistent=%s clear_on_acknowledge=%s",
+        notification_id,
+        via,
+        record.get("persistent"),
+        record.get("clear_on_acknowledge", True),
+    )
     if record.get("persistent"):
-        persistent_notification.async_dismiss(hass, notification_id)
+        try:
+            persistent_notification.async_dismiss(hass, notification_id)
+        except Exception:
+            _LOGGER.exception(
+                "K93 ANS failed dismissing persistent_notification %s", notification_id
+            )
     if record.get("clear_on_acknowledge", True):
         await _clear_mobile_notifications(hass, record)
     async_dispatcher_send(hass, SIGNAL_UPDATED, record)
