@@ -19,6 +19,9 @@ def async_register_websocket_api(hass: HomeAssistant, store: NotificationStore) 
             vol.Required("type"): "k93_ans/list",
             vol.Optional("include_acknowledged", default=True): bool,
             vol.Optional("limit"): int,
+            vol.Optional("channels"): [str],
+            vol.Optional("channel_mode", default="include"): vol.In(["include", "exclude"]),
+            vol.Optional("min_importance"): str,
         }
     )
     @callback
@@ -26,7 +29,11 @@ def async_register_websocket_api(hass: HomeAssistant, store: NotificationStore) 
         hass_: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
     ) -> None:
         records = store.async_list(
-            include_acknowledged=msg["include_acknowledged"], limit=msg.get("limit")
+            include_acknowledged=msg["include_acknowledged"],
+            limit=msg.get("limit"),
+            channels=msg.get("channels"),
+            channel_mode=msg["channel_mode"],
+            min_importance=msg.get("min_importance"),
         )
         connection.send_result(msg["id"], {"notifications": records})
 

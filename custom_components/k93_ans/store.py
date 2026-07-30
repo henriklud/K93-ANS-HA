@@ -7,8 +7,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import STORAGE_KEY, STORAGE_VERSION
+from .const import IMPORTANCE_LEVELS, STORAGE_KEY, STORAGE_VERSION
 from .models import NotificationRecord
+
+
+def _importance_rank(level: str) -> int:
+    try:
+        return IMPORTANCE_LEVELS.index(level)
+    except ValueError:
+        return IMPORTANCE_LEVELS.index("normal")
 
 
 class NotificationStore:
@@ -57,12 +64,35 @@ class NotificationStore:
         return None
 
     def async_list(
-        self, include_acknowledged: bool = True, limit: int | None = None
+        self,
+        include_acknowledged: bool = True,
+        limit: int | None = None,
+        channels: list[str] | None = None,
+        channel_mode: str = "include",
+        min_importance: str | None = None,
     ) -> list[NotificationRecord]:
-        """Return notifications, newest first."""
+        """Return notifications, newest first.
+
+        channels/channel_mode/min_importance let a caller (the card's History/ticker fetch) ask
+        for the most recent `limit` records that already match a filter, instead of the most
+        recent `limit` records overall filtered afterwards - the latter lets a handful of noisy
+        channels crowd a rarer one out of the fetch window entirely, even though it has plenty of
+        history further back. Compared case-insensitively since a channel key is always
+        lowercased when saved (see config_flow.py) but older stored records may not be (fixed
+        going forward in services.py).
+        """
         records = self._notifications
         if not include_acknowledged:
             records = [r for r in records if not r["acknowledged"]]
+        if channels:
+            normalized = {c.strip().lower() for c in channels}
+            if channel_mode == "exclude":
+                records = [r for r in records if r["channel"].lower() not in normalized]
+            else:
+                records = [r for r in records if r["channel"].lower() in normalized]
+        if min_importance:
+            min_rank = _importance_rank(min_importance)
+            records = [r for r in records if _importance_rank(r["importance"]) >= min_rank]
         if limit is not None:
             records = records[:limit]
         return records
