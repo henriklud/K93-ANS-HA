@@ -17,9 +17,6 @@ DEFAULT_CHANNEL = "default"
 IMPORTANCE_LEVELS = ["low", "normal", "high", "critical"]
 DEFAULT_IMPORTANCE = "normal"
 
-# Seeded on first setup; users can edit, disable, remove or add to these via
-# the options flow. Acknowledgement is controlled independently by the
-# send_notification service's own "persistent" field, not by channel choice.
 BUILTIN_CHANNELS = [
     {"key": "info", "name": "Info", "min_importance": "low"},
     {"key": "alert", "name": "Alert", "min_importance": "high"},
@@ -29,8 +26,6 @@ BUILTIN_CHANNELS = [
     {"key": "system", "name": "System", "min_importance": "normal"},
 ]
 
-# Companion-app data.* field values. These are not a stable HA core API and
-# may need updating if the companion apps change their accepted values.
 ANDROID_IMPORTANCE_MAP = {"low": "low", "normal": "default", "high": "high", "critical": "max"}
 IOS_INTERRUPTION_MAP = {
     "low": "passive",
@@ -52,9 +47,6 @@ DEFAULT_HISTORY_RETENTION_DAYS = 90
 DEFAULT_HISTORY_MAX_RECORDS = 500
 DEFAULT_LANGUAGE = "auto"
 
-# Text baked into outgoing notification payloads (e.g. the auto-appended acknowledge action
-# button), as opposed to strings.json/translations, which only cover the HA frontend UI
-# (config/options flow). "auto" resolves via hass.config.language - see services._resolve_language.
 SUPPORTED_LANGUAGES = ["en", "no"]
 ACK_ACTION_LABELS = {"en": "Acknowledge", "no": "Bekreft"}
 

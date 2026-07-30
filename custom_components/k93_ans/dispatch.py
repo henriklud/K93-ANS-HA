@@ -114,10 +114,6 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
     }
     if record.get("actions"):
         data["actions"] = record["actions"]
-        # "sticky" keeps the companion app from dismissing the notification when the user
-        # interacts with it - without it, pressing an action button (e.g. a vacuum's
-        # Pause/Resume) closes the notification along with running the action. Default to
-        # keeping it open; `dismiss_on_action` opts back into the old auto-close behavior.
         if not record.get("dismiss_on_action"):
             data["sticky"] = True
     if record.get("persistent"):
@@ -132,7 +128,7 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
     if image:
         data["image"] = image
 
-    data.update(record.get("data") or {})  # caller-supplied extras win last
+    data.update(record.get("data") or {})
 
     return {"title": record["title"], "message": record["message"], "data": data}
 
@@ -146,7 +142,7 @@ async def async_handle_notification_event(
     dispatches to matching notify.* targets, creates a persistent_notification
     when required, and persists the resulting record to history.
     """
-    record: NotificationRecord = dict(event.data)  # type: ignore[assignment]
+    record: NotificationRecord = dict(event.data)
 
     channels = {c["key"]: c for c in entry.options.get(CONF_CHANNELS, [])}
     recipients = entry.options.get(CONF_RECIPIENTS, [])
@@ -207,7 +203,7 @@ async def async_handle_notification_event(
                         recipient["notify_service"],
                         err,
                     )
-                except Exception as err:  # noqa: BLE001 - a broken recipient must not block others
+                except Exception as err:
                     delivery["dispatch_error"] = str(err)
                     _LOGGER.exception(
                         "K93 ANS failed delivering to notify.%s", recipient["notify_service"]
@@ -260,7 +256,7 @@ async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationR
                 {"message": "clear_notification", "data": {"tag": record["id"]}},
                 blocking=False,
             )
-        except Exception:  # noqa: BLE001 - clearing one phone must not block the rest
+        except Exception:
             _LOGGER.exception(
                 "K93 ANS failed clearing pushed notification on notify.%s", notify_service
             )
