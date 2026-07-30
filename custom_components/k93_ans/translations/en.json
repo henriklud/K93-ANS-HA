@@ -52,6 +52,7 @@
           "name": "Name",
           "min_importance": "Minimum importance",
           "enabled": "Enabled",
+          "color": "Icon color (CSS color, e.g. #ff0000 or red - blank = theme default)",
           "remove": "Remove this channel"
         }
       },

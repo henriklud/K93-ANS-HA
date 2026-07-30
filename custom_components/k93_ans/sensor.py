@@ -103,6 +103,7 @@ class K93AnsChannelsSensor(K93AnsSensorBase):
                     "name": channel["name"],
                     "min_importance": channel["min_importance"],
                     "enabled": channel.get("enabled", True),
+                    "color": channel.get("color"),
                 }
                 for channel in self._entry.options.get(CONF_CHANNELS, [])
             ]

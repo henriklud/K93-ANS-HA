@@ -62,6 +62,7 @@ def default_options() -> dict:
                 "name": channel["name"],
                 "min_importance": channel["min_importance"],
                 "enabled": True,
+                "color": None,
             }
             for channel in BUILTIN_CHANNELS
         ],

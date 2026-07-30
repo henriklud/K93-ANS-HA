@@ -52,6 +52,7 @@
           "name": "Navn",
           "min_importance": "Minimum viktighet",
           "enabled": "Aktivert",
+          "color": "Ikonfarge (CSS-farge, f.eks. #ff0000 eller red - tom = temaets standard)",
           "remove": "Fjern denne kanalen"
         }
       },

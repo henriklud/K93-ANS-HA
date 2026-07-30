@@ -242,6 +242,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                     "name": user_input["name"],
                     "min_importance": user_input["min_importance"],
                     "enabled": user_input["enabled"],
+                    "color": user_input.get("color") or None,
                 }
                 if existing:
                     options[CONF_CHANNELS] = [
@@ -266,6 +267,9 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 vol.Optional(
                     "enabled", default=existing["enabled"] if existing else True
                 ): selector.BooleanSelector(),
+                vol.Optional(
+                    "color", default=(existing.get("color") if existing else None) or ""
+                ): selector.TextSelector(),
             }
         )
         if existing:

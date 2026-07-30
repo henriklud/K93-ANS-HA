@@ -64,3 +64,4 @@ class Channel(TypedDict):
     name: str
     min_importance: str
     enabled: bool
+    color: str | None
