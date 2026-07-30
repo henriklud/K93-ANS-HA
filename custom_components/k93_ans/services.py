@@ -90,7 +90,12 @@ def _build_record(
     notification_id = existing["id"] if existing else str(uuid.uuid4())
     created = existing["created"] if existing else dt_util.utcnow().isoformat()
     actions = list(call.data["actions"])
-    channel = call.data["channel"]
+    # Normalized exactly like config_flow normalizes a channel's key when it's saved, so a caller
+    # can pass any casing/spacing ("Aktivitet", " aktivitet ") and still land on the same stored
+    # channel key ("aktivitet") - without this, a mismatched case would silently miss the
+    # configured channel during dispatch (falling back to the default channel's recipient
+    # filtering) and would silently fail to match the card's include/exclude channel filter too.
+    channel = call.data["channel"].strip().lower().replace(" ", "_")
     persistent = call.data["persistent"]
 
     has_ack_action = any(a["action"].startswith(ACK_ACTION_PREFIX) for a in actions)
