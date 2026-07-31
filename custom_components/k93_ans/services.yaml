@@ -45,12 +45,17 @@ send_notification:
     channel:
       name: Channel
       description: >-
-        Configured channel key. Built-in channels are info, alert, event,
-        reminder, security and system. Defaults to "default".
+        Configured channel key, or a list of them. Built-in channels are
+        info, alert, event, reminder, security and system. When several are
+        given, a recipient receives the notification if it's subscribed to
+        any one of them; the first channel is used for anything that can
+        only carry one value (Android's notification channel, the card's
+        icon color). Defaults to "default".
       required: false
-      example: "security"
+      example: '["security", "event"]'
       selector:
         text:
+          multiple: true
     importance:
       name: Importance
       description: Importance level.
@@ -84,9 +89,14 @@ send_notification:
     target_recipients:
       name: Target recipients
       description: >-
-        Restrict delivery to these configured recipient IDs only. Omit to
-        consider all recipients.
+        Restrict delivery to these recipients only, given by their
+        configured name (as shown in Manage Recipients) or their id.
+        Case-insensitive. Omit to consider all recipients.
       required: false
+      example: '["Henriks phone"]'
+      selector:
+        text:
+          multiple: true
     home_only:
       name: Home only
       description: >-

@@ -1,6 +1,7 @@
 """Dispatch handling for incoming K93 ANS notification events."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Callable
 
@@ -49,6 +50,20 @@ def _importance_rank(level: str) -> int:
 def _is_mobile_app_target(notify_service: str) -> bool:
     """Heuristic: companion-app notify services are named mobile_app_<device>."""
     return notify_service.startswith("mobile_app_")
+
+
+def _recipient_targeted(recipient: dict[str, Any], target_recipients: list[str]) -> bool:
+    """Whether a recipient is included in a target_recipients list.
+
+    Matched by id (the stable value automations should use) or by the recipient's configured
+    name (case-insensitive) - the id is an opaque uuid a human can't easily look up, so the name
+    gives a usable value for anyone picking recipients by hand (e.g. in Developer Tools).
+    """
+    targets = {t.strip().lower() for t in target_recipients if t and t.strip()}
+    return (
+        recipient["id"].lower() in targets
+        or recipient.get("name", "").strip().lower() in targets
+    )
 
 
 def _is_home(hass: HomeAssistant, recipient: dict[str, Any]) -> bool:
@@ -114,6 +129,10 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
     }
     if record.get("actions"):
         data["actions"] = record["actions"]
+        # "sticky" keeps the companion app from dismissing the notification when the user
+        # interacts with it - without it, pressing an action button (e.g. a vacuum's
+        # Pause/Resume) closes the notification along with running the action. Default to
+        # keeping it open; `dismiss_on_action` opts back into the old auto-close behavior.
         if not record.get("dismiss_on_action"):
             data["sticky"] = True
     if record.get("persistent"):
@@ -128,7 +147,7 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
     if image:
         data["image"] = image
 
-    data.update(record.get("data") or {})
+    data.update(record.get("data") or {})  # caller-supplied extras win last
 
     return {"title": record["title"], "message": record["message"], "data": data}
 
@@ -142,74 +161,79 @@ async def async_handle_notification_event(
     dispatches to matching notify.* targets, creates a persistent_notification
     when required, and persists the resulting record to history.
     """
-    record: NotificationRecord = dict(event.data)
+    record: NotificationRecord = dict(event.data)  # type: ignore[assignment]
 
-    channels = {c["key"]: c for c in entry.options.get(CONF_CHANNELS, [])}
+    channel_defs = {c["key"]: c for c in entry.options.get(CONF_CHANNELS, [])}
     recipients = entry.options.get(CONF_RECIPIENTS, [])
 
-    channel = channels.get(record["channel"])
-    if channel is None:
-        if record["channel"] != DEFAULT_CHANNEL:
-            _LOGGER.warning(
-                "K93 ANS: unknown channel '%s', falling back to default", record["channel"]
-            )
-        channel = _FALLBACK_CHANNEL
+    # A notification can be tagged with several channels (see services.py) - a recipient matches
+    # if it qualifies under *any one* of them. The first channel is kept as the record's primary
+    # one for whatever can only carry a single value (Android's own notification channel, the
+    # card's icon color, the persistent_notification).
+    record_channel_keys = record.get("channels") or [record["channel"]]
+    resolved_channels = []
+    for key in record_channel_keys:
+        channel = channel_defs.get(key)
+        if channel is None:
+            if key != DEFAULT_CHANNEL:
+                _LOGGER.warning("K93 ANS: unknown channel '%s', falling back to default", key)
+            channel = _FALLBACK_CHANNEL
+        resolved_channels.append(channel)
+    primary_channel = resolved_channels[0]
 
     record_rank = _importance_rank(record["importance"])
-    channel_rank = _importance_rank(channel["min_importance"])
     target_recipients = record.get("target_recipients")
 
     deliveries: dict[str, Any] = {}
-    if channel.get("enabled", True):
-        for recipient in recipients:
-            if not recipient.get("enabled", True):
-                continue
-            if target_recipients and recipient["id"] not in target_recipients:
-                continue
+    for recipient in recipients:
+        if not recipient.get("enabled", True):
+            continue
+        if target_recipients and not _recipient_targeted(recipient, target_recipients):
+            continue
 
-            recipient_rank = _importance_rank(recipient["min_importance"])
-            allowed_channels = recipient.get("allowed_channels") or []
-            channel_allowed = not allowed_channels or channel["key"] in allowed_channels
-            present_ok = not record.get("home_only") or _is_home(hass, recipient)
-            matched = (
-                record_rank >= max(recipient_rank, channel_rank)
-                and channel_allowed
-                and present_ok
-            )
+        recipient_rank = _importance_rank(recipient["min_importance"])
+        allowed_channels = recipient.get("allowed_channels") or []
+        present_ok = not record.get("home_only") or _is_home(hass, recipient)
+        matched = present_ok and any(
+            channel.get("enabled", True)
+            and (not allowed_channels or channel["key"] in allowed_channels)
+            and record_rank >= max(recipient_rank, _importance_rank(channel["min_importance"]))
+            for channel in resolved_channels
+        )
 
-            delivery: dict[str, Any] = {
-                "notify_service": recipient["notify_service"],
-                "matched": matched,
-                "dispatched": False,
-                "dispatch_error": None,
-                "dispatched_at": None,
-            }
+        delivery: dict[str, Any] = {
+            "notify_service": recipient["notify_service"],
+            "matched": matched,
+            "dispatched": False,
+            "dispatch_error": None,
+            "dispatched_at": None,
+        }
 
-            if matched:
-                if _is_mobile_app_target(recipient["notify_service"]):
-                    payload = _build_mobile_app_payload(record, channel["name"])
-                else:
-                    payload = _build_notify_payload(record)
-                try:
-                    await hass.services.async_call(
-                        "notify", recipient["notify_service"], payload, blocking=False
-                    )
-                    delivery["dispatched"] = True
-                    delivery["dispatched_at"] = dt_util.utcnow().isoformat()
-                except ServiceNotFound as err:
-                    delivery["dispatch_error"] = str(err)
-                    _LOGGER.warning(
-                        "K93 ANS could not deliver to notify.%s: %s",
-                        recipient["notify_service"],
-                        err,
-                    )
-                except Exception as err:
-                    delivery["dispatch_error"] = str(err)
-                    _LOGGER.exception(
-                        "K93 ANS failed delivering to notify.%s", recipient["notify_service"]
-                    )
+        if matched:
+            if _is_mobile_app_target(recipient["notify_service"]):
+                payload = _build_mobile_app_payload(record, primary_channel["name"])
+            else:
+                payload = _build_notify_payload(record)
+            try:
+                await hass.services.async_call(
+                    "notify", recipient["notify_service"], payload, blocking=False
+                )
+                delivery["dispatched"] = True
+                delivery["dispatched_at"] = dt_util.utcnow().isoformat()
+            except ServiceNotFound as err:
+                delivery["dispatch_error"] = str(err)
+                _LOGGER.warning(
+                    "K93 ANS could not deliver to notify.%s: %s",
+                    recipient["notify_service"],
+                    err,
+                )
+            except Exception as err:  # noqa: BLE001 - a broken recipient must not block others
+                delivery["dispatch_error"] = str(err)
+                _LOGGER.exception(
+                    "K93 ANS failed delivering to notify.%s", recipient["notify_service"]
+                )
 
-            deliveries[recipient["id"]] = delivery
+        deliveries[recipient["id"]] = delivery
 
     record["recipients"] = deliveries
 
@@ -266,22 +290,38 @@ async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationR
                 notify_service,
             )
             continue
-        try:
-            _LOGGER.debug(
-                "K93 ANS sending clear_notification to notify.%s for %s",
-                notify_service,
-                record["id"],
-            )
-            await hass.services.async_call(
-                "notify",
-                notify_service,
-                {"message": "clear_notification", "data": {"tag": record["id"]}},
-                blocking=False,
-            )
-        except Exception:
-            _LOGGER.exception(
-                "K93 ANS failed clearing pushed notification on notify.%s", notify_service
-            )
+        # blocking=True (unlike the fire-and-forget original dispatch) so a failure in the
+        # notify platform itself actually raises here instead of being swallowed in a background
+        # task we never awaited - that swallowing is why earlier failures never showed up in our
+        # own log. One retry after a short delay covers a transient hiccup talking to
+        # FCM/APNs, which is the most likely cause of an occasional silent no-op.
+        for attempt in (1, 2):
+            try:
+                _LOGGER.debug(
+                    "K93 ANS sending clear_notification to notify.%s for %s (attempt %d)",
+                    notify_service,
+                    record["id"],
+                    attempt,
+                )
+                await hass.services.async_call(
+                    "notify",
+                    notify_service,
+                    {"message": "clear_notification", "data": {"tag": record["id"]}},
+                    blocking=True,
+                )
+                break
+            except Exception:  # noqa: BLE001 - clearing one phone must not block the rest
+                if attempt == 1:
+                    _LOGGER.warning(
+                        "K93 ANS clear_notification to notify.%s failed, retrying once",
+                        notify_service,
+                    )
+                    await asyncio.sleep(2)
+                else:
+                    _LOGGER.exception(
+                        "K93 ANS failed clearing pushed notification on notify.%s",
+                        notify_service,
+                    )
 
 
 async def async_acknowledge(
@@ -305,7 +345,7 @@ async def async_acknowledge(
     if record.get("persistent"):
         try:
             persistent_notification.async_dismiss(hass, notification_id)
-        except Exception:
+        except Exception:  # noqa: BLE001 - dismissing the bell must not block clearing the phone
             _LOGGER.exception(
                 "K93 ANS failed dismissing persistent_notification %s", notification_id
             )

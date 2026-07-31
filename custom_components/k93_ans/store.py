@@ -86,10 +86,14 @@ class NotificationStore:
             records = [r for r in records if not r["acknowledged"]]
         if channels:
             normalized = {c.strip().lower() for c in channels}
+
+            def _record_channels(r: NotificationRecord) -> set[str]:
+                return {c.lower() for c in (r.get("channels") or [r["channel"]])}
+
             if channel_mode == "exclude":
-                records = [r for r in records if r["channel"].lower() not in normalized]
+                records = [r for r in records if not (_record_channels(r) & normalized)]
             else:
-                records = [r for r in records if r["channel"].lower() in normalized]
+                records = [r for r in records if _record_channels(r) & normalized]
         if min_importance:
             min_rank = _importance_rank(min_importance)
             records = [r for r in records if _importance_rank(r["importance"]) >= min_rank]

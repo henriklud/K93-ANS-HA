@@ -26,6 +26,7 @@ class NotificationRecord(TypedDict):
     icon: str | None
     image: str | None
     channel: str
+    channels: list[str]
     importance: str
     actions: list[dict[str, str]]
     persistent: bool
