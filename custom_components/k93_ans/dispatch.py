@@ -129,10 +129,6 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
     }
     if record.get("actions"):
         data["actions"] = record["actions"]
-        # "sticky" keeps the companion app from dismissing the notification when the user
-        # interacts with it - without it, pressing an action button (e.g. a vacuum's
-        # Pause/Resume) closes the notification along with running the action. Default to
-        # keeping it open; `dismiss_on_action` opts back into the old auto-close behavior.
         if not record.get("dismiss_on_action"):
             data["sticky"] = True
     if record.get("persistent"):
@@ -147,7 +143,7 @@ def _build_mobile_app_payload(record: NotificationRecord, channel_name: str) -> 
     if image:
         data["image"] = image
 
-    data.update(record.get("data") or {})  # caller-supplied extras win last
+    data.update(record.get("data") or {})
 
     return {"title": record["title"], "message": record["message"], "data": data}
 
@@ -161,15 +157,14 @@ async def async_handle_notification_event(
     dispatches to matching notify.* targets, creates a persistent_notification
     when required, and persists the resulting record to history.
     """
-    record: NotificationRecord = dict(event.data)  # type: ignore[assignment]
+    record: NotificationRecord = dict(event.data)
+
+    previous = store.async_get(record["id"])
+    previous_deliveries: dict[str, Any] = (previous or {}).get("recipients") or {}
 
     channel_defs = {c["key"]: c for c in entry.options.get(CONF_CHANNELS, [])}
     recipients = entry.options.get(CONF_RECIPIENTS, [])
 
-    # A notification can be tagged with several channels (see services.py) - a recipient matches
-    # if it qualifies under *any one* of them. The first channel is kept as the record's primary
-    # one for whatever can only carry a single value (Android's own notification channel, the
-    # card's icon color, the persistent_notification).
     record_channel_keys = record.get("channels") or [record["channel"]]
     resolved_channels = []
     for key in record_channel_keys:
@@ -201,12 +196,13 @@ async def async_handle_notification_event(
             for channel in resolved_channels
         )
 
+        prior = previous_deliveries.get(recipient["id"])
         delivery: dict[str, Any] = {
             "notify_service": recipient["notify_service"],
             "matched": matched,
-            "dispatched": False,
+            "dispatched": bool(prior and prior.get("dispatched")),
             "dispatch_error": None,
-            "dispatched_at": None,
+            "dispatched_at": (prior or {}).get("dispatched_at"),
         }
 
         if matched:
@@ -227,13 +223,16 @@ async def async_handle_notification_event(
                     recipient["notify_service"],
                     err,
                 )
-            except Exception as err:  # noqa: BLE001 - a broken recipient must not block others
+            except Exception as err:
                 delivery["dispatch_error"] = str(err)
                 _LOGGER.exception(
                     "K93 ANS failed delivering to notify.%s", recipient["notify_service"]
                 )
 
         deliveries[recipient["id"]] = delivery
+
+    for recipient_id, prior_delivery in previous_deliveries.items():
+        deliveries.setdefault(recipient_id, prior_delivery)
 
     record["recipients"] = deliveries
 
@@ -290,11 +289,6 @@ async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationR
                 notify_service,
             )
             continue
-        # blocking=True (unlike the fire-and-forget original dispatch) so a failure in the
-        # notify platform itself actually raises here instead of being swallowed in a background
-        # task we never awaited - that swallowing is why earlier failures never showed up in our
-        # own log. One retry after a short delay covers a transient hiccup talking to
-        # FCM/APNs, which is the most likely cause of an occasional silent no-op.
         for attempt in (1, 2):
             try:
                 _LOGGER.debug(
@@ -310,7 +304,7 @@ async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationR
                     blocking=True,
                 )
                 break
-            except Exception:  # noqa: BLE001 - clearing one phone must not block the rest
+            except Exception:
                 if attempt == 1:
                     _LOGGER.warning(
                         "K93 ANS clear_notification to notify.%s failed, retrying once",
@@ -345,7 +339,7 @@ async def async_acknowledge(
     if record.get("persistent"):
         try:
             persistent_notification.async_dismiss(hass, notification_id)
-        except Exception:  # noqa: BLE001 - dismissing the bell must not block clearing the phone
+        except Exception:
             _LOGGER.exception(
                 "K93 ANS failed dismissing persistent_notification %s", notification_id
             )

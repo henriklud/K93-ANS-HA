@@ -90,15 +90,6 @@ def _build_record(
     notification_id = existing["id"] if existing else str(uuid.uuid4())
     created = existing["created"] if existing else dt_util.utcnow().isoformat()
     actions = list(call.data["actions"])
-    # Normalized exactly like config_flow normalizes a channel's key when it's saved, so a caller
-    # can pass any casing/spacing ("Aktivitet", " aktivitet ") and still land on the same stored
-    # channel key ("aktivitet") - without this, a mismatched case would silently miss the
-    # configured channel during dispatch (falling back to the default channel's recipient
-    # filtering) and would silently fail to match the card's include/exclude channel filter too.
-    # "channel" accepts either a single key or a list of them - a notification tagged with
-    # several channels matches a recipient subscribed to any one of them. The first channel is
-    # kept as the single "channel" field too, for anything (Android's own notification channel,
-    # the card's icon color, the persistent_notification) that can only show one.
     raw_channels = call.data["channel"]
     if isinstance(raw_channels, str):
         raw_channels = [raw_channels]

@@ -63,7 +63,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
             self.config_entry, options=self._ensure_options()
         )
 
-    # -- menu -----------------------------------------------------------
 
     async def async_step_init(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
         """Show the main options menu."""
@@ -77,7 +76,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
         """Finish the options flow."""
         return self.async_create_entry(title="", data=self._ensure_options())
 
-    # -- recipients -------------------------------------------------------
 
     async def async_step_manage_recipients(
         self, user_input: dict | None = None
@@ -184,7 +182,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(step_id="edit_recipient", data_schema=schema)
 
-    # -- channels -----------------------------------------------------------
 
     async def async_step_manage_channels(
         self, user_input: dict | None = None
@@ -282,7 +279,6 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(step_id="edit_channel", data_schema=schema, errors=errors)
 
-    # -- advanced -------------------------------------------------------
 
     async def async_step_advanced(
         self, user_input: dict | None = None
