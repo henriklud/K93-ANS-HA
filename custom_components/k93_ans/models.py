@@ -53,6 +53,7 @@ class Recipient(TypedDict):
     notify_service: str
     min_importance: str
     allowed_channels: list[str]
+    channel_importance: dict[str, str]
     enabled: bool
     person_entity_id: str | None
     interactive_entity_id: str | None

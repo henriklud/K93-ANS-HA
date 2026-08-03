@@ -23,6 +23,7 @@ from .const import (
 )
 
 ADD_NEW = "__add_new__"
+CHANNEL_IMPORTANCE_FIELD_PREFIX = "importance_for_"
 
 
 class K93AnsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -119,6 +120,11 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
             if user_input.get("remove") and existing is not None:
                 options[CONF_RECIPIENTS] = [r for r in recipients if r["id"] != existing["id"]]
             else:
+                channel_importance = {
+                    key[len(CHANNEL_IMPORTANCE_FIELD_PREFIX) :]: value
+                    for key, value in user_input.items()
+                    if key.startswith(CHANNEL_IMPORTANCE_FIELD_PREFIX) and value
+                }
                 recipient = {
                     "id": existing["id"] if existing else str(uuid.uuid4()),
                     "name": user_input["name"],
@@ -127,6 +133,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                     "interactive_entity_id": user_input.get("interactive_entity_id") or None,
                     "min_importance": user_input["min_importance"],
                     "allowed_channels": user_input.get("allowed_channels", []),
+                    "channel_importance": channel_importance,
                     "enabled": user_input["enabled"],
                 }
                 if existing:
@@ -181,6 +188,21 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 "enabled", default=existing["enabled"] if existing else True
             ): selector.BooleanSelector(),
         }
+
+        channel_importance = existing.get("channel_importance", {}) if existing else {}
+        importance_override_options = [{"value": "", "label": "(use recipient default)"}] + [
+            {"value": level, "label": level} for level in IMPORTANCE_LEVELS
+        ]
+        for channel_key in (existing.get("allowed_channels", []) if existing else []):
+            schema_dict[
+                vol.Optional(
+                    f"{CHANNEL_IMPORTANCE_FIELD_PREFIX}{channel_key}",
+                    default=channel_importance.get(channel_key, ""),
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(options=importance_override_options)
+            )
+
         if existing:
             schema_dict[vol.Optional("remove", default=False)] = selector.BooleanSelector()
 

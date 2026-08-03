@@ -29,12 +29,13 @@
       },
       "edit_recipient": {
         "title": "Mottaker",
+        "description": "Etter at du har valgt \"Tillatte kanaler\" og lagret, åpne mottakeren på nytt for å sette en egen minimumsviktighet per kanal (felt kalt \"Importance for <kanal>\") - de vises kun for kanaler som allerede er lagret i Tillatte kanaler.",
         "data": {
           "name": "Navn",
           "notify_service": "Varslingstjeneste",
           "person_entity_id": "Person (valgfritt - kreves for \"kun hjemme\"-varsler)",
           "interactive_entity_id": "Interaktiv-sensor (valgfritt - en binary_sensor som er \"på\" mens denne mottakerens telefon er i bruk; kreves for inaktivitetstidsavbruddet for direktevarsler nedenfor)",
-          "min_importance": "Minimum viktighet",
+          "min_importance": "Minimum viktighet (standard; kan overstyres per kanal nedenfor)",
           "allowed_channels": "Tillatte kanaler (tom = alle)",
           "enabled": "Aktivert",
           "remove": "Fjern denne mottakeren"

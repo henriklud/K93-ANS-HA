@@ -188,13 +188,18 @@ async def async_handle_notification_event(
         if target_recipients and not _recipient_targeted(recipient, target_recipients):
             continue
 
-        recipient_rank = _importance_rank(recipient["min_importance"])
+        recipient_channel_importance = recipient.get("channel_importance") or {}
         allowed_channels = recipient.get("allowed_channels") or []
         present_ok = not record.get("home_only") or _is_home(hass, recipient)
         matched = present_ok and any(
             channel.get("enabled", True)
             and (not allowed_channels or channel["key"] in allowed_channels)
-            and record_rank >= max(recipient_rank, _importance_rank(channel["min_importance"]))
+            and record_rank >= max(
+                _importance_rank(
+                    recipient_channel_importance.get(channel["key"]) or recipient["min_importance"]
+                ),
+                _importance_rank(channel["min_importance"]),
+            )
             for channel in resolved_channels
         )
 
