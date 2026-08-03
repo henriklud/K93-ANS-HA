@@ -17,6 +17,7 @@
         "menu_options": {
           "manage_recipients": "Manage recipients",
           "manage_channels": "Manage channels",
+          "manage_scheduled": "Manage scheduled notifications",
           "advanced": "Advanced",
           "finish": "Done"
         }
@@ -33,12 +34,18 @@
         "data": {
           "name": "Name",
           "notify_service": "Notify service",
-          "person_entity_id": "Person (optional - required for \"home only\" notifications)",
-          "interactive_entity_id": "Interactive sensor (optional - a binary_sensor that's \"on\" while this recipient's phone is in use; required for the live notification inactivity timeout below)",
-          "min_importance": "Minimum importance (default; overridable per channel below)",
-          "allowed_channels": "Allowed channels (empty = all)",
+          "person_entity_id": "Person",
+          "interactive_entity_id": "Interactive sensor",
+          "min_importance": "Minimum importance",
+          "allowed_channels": "Allowed channels",
           "enabled": "Enabled",
           "remove": "Remove this recipient"
+        },
+        "data_description": {
+          "person_entity_id": "Optional - only meaningful when a notification sets \"home only\"; required for that filter to affect this recipient at all.",
+          "interactive_entity_id": "Optional - a binary_sensor that's \"on\" while this recipient's phone is in use. Required for the live notification inactivity timeout under Advanced.",
+          "min_importance": "Default minimum importance for this recipient - overridable per channel, in the fields that appear below after saving a channel selection.",
+          "allowed_channels": "Empty = all channels."
         }
       },
       "manage_channels": {
@@ -54,8 +61,46 @@
           "name": "Name",
           "min_importance": "Minimum importance",
           "enabled": "Enabled",
-          "color": "Icon color (CSS color, e.g. #ff0000 or red - blank = theme default)",
+          "color": "Icon color",
+          "retention_days": "History retention override (days)",
+          "max_records": "History max records override",
           "remove": "Remove this channel"
+        },
+        "data_description": {
+          "color": "Any CSS color (e.g. #ff0000 or red). Blank = theme default.",
+          "retention_days": "Blank = use the global \"History retention\" under Advanced. Useful for a noisy channel you only want kept a day or two, or an important one you want kept for months.",
+          "max_records": "Blank = use the global \"History max records\" under Advanced. Applies to this channel's own notifications only - a noisy channel's volume no longer crowds out a rarer channel's history."
+        }
+      },
+      "manage_scheduled": {
+        "title": "Manage scheduled notifications",
+        "data": {
+          "scheduled": "Scheduled notification"
+        }
+      },
+      "edit_scheduled": {
+        "title": "Scheduled notification",
+        "description": "Fires send_notification on its own recurring schedule - a cron expression, standard 5-field format (minute hour day-of-month month day-of-week), e.g. \"0 8 * * *\" for every day at 08:00, or \"*/30 * * * *\" for every 30 minutes.",
+        "data": {
+          "name": "Name",
+          "cron": "Cron expression",
+          "enabled": "Enabled",
+          "title": "Title",
+          "message": "Message",
+          "icon": "Icon",
+          "channel": "Channel",
+          "importance": "Importance",
+          "persistent": "Persistent",
+          "home_only": "Home only",
+          "target_recipients": "Target recipients",
+          "remove": "Remove this scheduled notification"
+        },
+        "data_description": {
+          "cron": "Standard 5-field cron syntax. Evaluated in Home Assistant's own local time.",
+          "icon": "An mdi: icon, e.g. mdi:pill. Blank = default.",
+          "persistent": "If true, requires acknowledgement via the built-in persistent notification system, same as send_notification's own \"persistent\" field.",
+          "home_only": "Only deliver to recipients whose assigned person entity is currently home.",
+          "target_recipients": "Restrict delivery to these recipients (by name), same as send_notification's own \"target_recipients\" field. Empty = consider all enabled recipients."
         }
       },
       "advanced": {
@@ -63,14 +108,20 @@
         "data": {
           "history_retention_days": "History retention (days)",
           "history_max_records": "History max records",
-          "language": "Language (used for outgoing notification text, e.g. the Acknowledge action button)",
-          "live_inactivity_timeout_minutes": "Live notification inactivity timeout (minutes, 0 = disabled) - clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long",
-          "storage_path": "Notification history storage directory (blank = default K93-Advanced-Notification-System folder). Absolute, or relative to the Home Assistant config directory; must be writable by Home Assistant. The database.json file inside it is named that regardless. Existing history is migrated automatically. Takes effect as soon as you save."
+          "language": "Language",
+          "live_inactivity_timeout_minutes": "Live notification inactivity timeout (minutes)",
+          "storage_path": "Notification history storage directory"
+        },
+        "data_description": {
+          "language": "Used for outgoing notification text, e.g. the Acknowledge action button.",
+          "live_inactivity_timeout_minutes": "0 = disabled. Clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long.",
+          "storage_path": "Blank = default K93-Advanced-Notification-System folder. Absolute, or relative to the Home Assistant config directory; must be writable by Home Assistant. The database.db file inside it is named that regardless. Existing history is migrated automatically. Takes effect as soon as you save."
         }
       }
     },
     "error": {
-      "duplicate_key": "A channel with this key already exists."
+      "duplicate_key": "A channel with this key already exists.",
+      "invalid_cron": "Not a valid cron expression."
     }
   }
 }

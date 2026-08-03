@@ -17,6 +17,7 @@
         "menu_options": {
           "manage_recipients": "Administrer mottakere",
           "manage_channels": "Administrer kanaler",
+          "manage_scheduled": "Administrer planlagte varsler",
           "advanced": "Avansert",
           "finish": "Ferdig"
         }
@@ -33,12 +34,18 @@
         "data": {
           "name": "Navn",
           "notify_service": "Varslingstjeneste",
-          "person_entity_id": "Person (valgfritt - kreves for \"kun hjemme\"-varsler)",
-          "interactive_entity_id": "Interaktiv-sensor (valgfritt - en binary_sensor som er \"på\" mens denne mottakerens telefon er i bruk; kreves for inaktivitetstidsavbruddet for direktevarsler nedenfor)",
-          "min_importance": "Minimum viktighet (standard; kan overstyres per kanal nedenfor)",
-          "allowed_channels": "Tillatte kanaler (tom = alle)",
+          "person_entity_id": "Person",
+          "interactive_entity_id": "Interaktiv-sensor",
+          "min_importance": "Minimum viktighet",
+          "allowed_channels": "Tillatte kanaler",
           "enabled": "Aktivert",
           "remove": "Fjern denne mottakeren"
+        },
+        "data_description": {
+          "person_entity_id": "Valgfritt - kun relevant når et varsel setter \"kun hjemme\"; kreves for at det filteret skal påvirke denne mottakeren i det hele tatt.",
+          "interactive_entity_id": "Valgfritt - en binary_sensor som er \"på\" mens denne mottakerens telefon er i bruk. Kreves for inaktivitetstidsavbruddet for direktevarsler under Avansert.",
+          "min_importance": "Standard minimum viktighet for denne mottakeren - kan overstyres per kanal, i feltene som vises nedenfor etter at et kanalvalg er lagret.",
+          "allowed_channels": "Tom = alle kanaler."
         }
       },
       "manage_channels": {
@@ -54,8 +61,46 @@
           "name": "Navn",
           "min_importance": "Minimum viktighet",
           "enabled": "Aktivert",
-          "color": "Ikonfarge (CSS-farge, f.eks. #ff0000 eller red - tom = temaets standard)",
+          "color": "Ikonfarge",
+          "retention_days": "Overstyring av lagringstid for historikk (dager)",
+          "max_records": "Overstyring av maks antall i historikk",
           "remove": "Fjern denne kanalen"
+        },
+        "data_description": {
+          "color": "En hvilken som helst CSS-farge (f.eks. #ff0000 eller red). Tom = temaets standard.",
+          "retention_days": "Tom = bruk den globale \"Lagringstid for historikk\" under Avansert. Nyttig for en pratsom kanal du kun vil beholde en dag eller to, eller en viktig en du vil beholde i flere måneder.",
+          "max_records": "Tom = bruk det globale \"Maks antall i historikk\" under Avansert. Gjelder kun denne kanalens egne varsler - en pratsom kanals volum fortrenger ikke lenger en sjeldnere kanals historikk."
+        }
+      },
+      "manage_scheduled": {
+        "title": "Administrer planlagte varsler",
+        "data": {
+          "scheduled": "Planlagt varsel"
+        }
+      },
+      "edit_scheduled": {
+        "title": "Planlagt varsel",
+        "description": "Sender send_notification på sin egen gjentakende tidsplan - et cron-uttrykk, standard 5-felts format (minutt time dag-i-måned måned ukedag), f.eks. \"0 8 * * *\" for hver dag kl. 08:00, eller \"*/30 * * * *\" for hvert 30. minutt.",
+        "data": {
+          "name": "Navn",
+          "cron": "Cron-uttrykk",
+          "enabled": "Aktivert",
+          "title": "Tittel",
+          "message": "Melding",
+          "icon": "Ikon",
+          "channel": "Kanal",
+          "importance": "Viktighet",
+          "persistent": "Vedvarende",
+          "home_only": "Kun hjemme",
+          "target_recipients": "Målmottakere",
+          "remove": "Fjern dette planlagte varselet"
+        },
+        "data_description": {
+          "cron": "Standard 5-felts cron-syntaks. Evalueres i Home Assistants egen lokale tid.",
+          "icon": "Et mdi:-ikon, f.eks. mdi:pill. Tom = standard.",
+          "persistent": "Hvis sann, kreves bekreftelse via det innebygde vedvarende varslingssystemet, samme som send_notifications eget \"persistent\"-felt.",
+          "home_only": "Lever kun til mottakere hvis tilknyttede personentitet for øyeblikket er hjemme.",
+          "target_recipients": "Begrens levering til disse mottakerne (etter navn), samme som send_notifications eget \"target_recipients\"-felt. Tom = vurder alle aktiverte mottakere."
         }
       },
       "advanced": {
@@ -63,14 +108,20 @@
         "data": {
           "history_retention_days": "Lagringstid for historikk (dager)",
           "history_max_records": "Maks antall i historikk",
-          "language": "Språk (brukt for utgående varslingstekst, f.eks. Bekreft-knappen)",
-          "live_inactivity_timeout_minutes": "Inaktivitetstidsavbrudd for direktevarsler (minutter, 0 = deaktivert) - fjerner en direktevarsel-push for en mottaker når deres interaktiv-sensor har vært \"av\" så lenge",
-          "storage_path": "Lagringsmappe for varslingshistorikk (tom = standard K93-Advanced-Notification-System-mappe). Absolutt, eller relativ til Home Assistants konfigurasjonsmappe; må være skrivbar for Home Assistant. database.json-filen inni den heter det uansett. Eksisterende historikk flyttes automatisk. Trer i kraft med én gang du lagrer."
+          "language": "Språk",
+          "live_inactivity_timeout_minutes": "Inaktivitetstidsavbrudd for direktevarsler (minutter)",
+          "storage_path": "Lagringsmappe for varslingshistorikk"
+        },
+        "data_description": {
+          "language": "Brukt for utgående varslingstekst, f.eks. Bekreft-knappen.",
+          "live_inactivity_timeout_minutes": "0 = deaktivert. Fjerner en direktevarsel-push for en mottaker når deres interaktiv-sensor har vært \"av\" så lenge.",
+          "storage_path": "Tom = standard K93-Advanced-Notification-System-mappe. Absolutt, eller relativ til Home Assistants konfigurasjonsmappe; må være skrivbar for Home Assistant. database.db-filen inni den heter det uansett. Eksisterende historikk flyttes automatisk. Trer i kraft med én gang du lagrer."
         }
       }
     },
     "error": {
-      "duplicate_key": "En kanal med denne nøkkelen finnes allerede."
+      "duplicate_key": "En kanal med denne nøkkelen finnes allerede.",
+      "invalid_cron": "Ikke et gyldig cron-uttrykk."
     }
   }
 }

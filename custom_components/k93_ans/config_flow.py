@@ -5,6 +5,7 @@ import uuid
 from typing import Any
 
 import voluptuous as vol
+from croniter import croniter
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
@@ -17,7 +18,9 @@ from .const import (
     CONF_LANGUAGE,
     CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES,
     CONF_RECIPIENTS,
+    CONF_SCHEDULED_NOTIFICATIONS,
     CONF_STORAGE_PATH,
+    DEFAULT_CHANNEL,
     DOMAIN,
     IMPORTANCE_LEVELS,
     default_options,
@@ -72,7 +75,13 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
         self._ensure_options()
         return self.async_show_menu(
             step_id="init",
-            menu_options=["manage_recipients", "manage_channels", "advanced", "finish"],
+            menu_options=[
+                "manage_recipients",
+                "manage_channels",
+                "manage_scheduled",
+                "advanced",
+                "finish",
+            ],
         )
 
     async def async_step_finish(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:
@@ -275,6 +284,8 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
             if duplicate:
                 errors["key"] = "duplicate_key"
             else:
+                retention_days = user_input.get("retention_days")
+                max_records = user_input.get("max_records")
                 channel = {
                     "id": existing["id"] if existing else str(uuid.uuid4()),
                     "key": key,
@@ -282,6 +293,8 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                     "min_importance": user_input["min_importance"],
                     "enabled": user_input["enabled"],
                     "color": user_input.get("color") or None,
+                    "retention_days": int(retention_days) if retention_days not in (None, "") else None,
+                    "max_records": int(max_records) if max_records not in (None, "") else None,
                 }
                 if existing:
                     options[CONF_CHANNELS] = [
@@ -311,6 +324,20 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                     default="",
                     description={"suggested_value": (existing.get("color") if existing else None) or ""},
                 ): selector.TextSelector(),
+                vol.Optional(
+                    "retention_days",
+                    default=None,
+                    description={
+                        "suggested_value": existing.get("retention_days") if existing else None
+                    },
+                ): selector.NumberSelector(selector.NumberSelectorConfig(min=1, mode="box")),
+                vol.Optional(
+                    "max_records",
+                    default=None,
+                    description={
+                        "suggested_value": existing.get("max_records") if existing else None
+                    },
+                ): selector.NumberSelector(selector.NumberSelectorConfig(min=1, mode="box")),
             }
         )
         if existing:
@@ -319,6 +346,138 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
             )
 
         return self.async_show_form(step_id="edit_channel", data_schema=schema, errors=errors)
+
+
+    async def async_step_manage_scheduled(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Pick an existing scheduled notification to edit, or add a new one."""
+        options = self._ensure_options()
+        scheduled = options[CONF_SCHEDULED_NOTIFICATIONS]
+
+        if user_input is not None:
+            self._editing_id = (
+                None if user_input["scheduled"] == ADD_NEW else user_input["scheduled"]
+            )
+            return await self.async_step_edit_scheduled()
+
+        if not scheduled:
+            self._editing_id = None
+            return await self.async_step_edit_scheduled()
+
+        choices = [{"value": s["id"], "label": s["name"]} for s in scheduled]
+        choices.append({"value": ADD_NEW, "label": "Add new scheduled notification"})
+
+        return self.async_show_form(
+            step_id="manage_scheduled",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("scheduled"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=choices, mode="dropdown")
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_scheduled(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Add, edit or remove a single scheduled notification."""
+        options = self._ensure_options()
+        scheduled_list = options[CONF_SCHEDULED_NOTIFICATIONS]
+        existing = next((s for s in scheduled_list if s["id"] == self._editing_id), None)
+
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            if user_input.get("remove") and existing is not None:
+                options[CONF_SCHEDULED_NOTIFICATIONS] = [
+                    s for s in scheduled_list if s["id"] != existing["id"]
+                ]
+                await self._async_save()
+                return await self.async_step_init()
+
+            cron = user_input["cron"].strip()
+            if not croniter.is_valid(cron):
+                errors["cron"] = "invalid_cron"
+            else:
+                raw_channel = user_input.get("channel") or DEFAULT_CHANNEL
+                channel = raw_channel.strip().lower().replace(" ", "_")
+                item = {
+                    "id": existing["id"] if existing else str(uuid.uuid4()),
+                    "name": user_input["name"],
+                    "enabled": user_input["enabled"],
+                    "cron": cron,
+                    "title": user_input["title"],
+                    "message": user_input["message"],
+                    "icon": user_input.get("icon") or None,
+                    "channel": channel,
+                    "importance": user_input["importance"],
+                    "persistent": user_input["persistent"],
+                    "home_only": user_input["home_only"],
+                    "target_recipients": user_input.get("target_recipients", []),
+                }
+                if existing:
+                    options[CONF_SCHEDULED_NOTIFICATIONS] = [
+                        item if s["id"] == existing["id"] else s for s in scheduled_list
+                    ]
+                else:
+                    options[CONF_SCHEDULED_NOTIFICATIONS] = [*scheduled_list, item]
+
+                await self._async_save()
+                return await self.async_step_init()
+
+        channel_choices = [c["key"] for c in options[CONF_CHANNELS]]
+        recipient_choices = [r["name"] for r in options[CONF_RECIPIENTS]]
+
+        schema_dict: dict[Any, Any] = {
+            vol.Required("name", default=existing["name"] if existing else ""): selector.TextSelector(),
+            vol.Required(
+                "cron", default=existing["cron"] if existing else "0 8 * * *"
+            ): selector.TextSelector(),
+            vol.Optional(
+                "enabled", default=existing["enabled"] if existing else True
+            ): selector.BooleanSelector(),
+            vol.Required("title", default=existing["title"] if existing else ""): selector.TextSelector(),
+            vol.Required(
+                "message", default=existing["message"] if existing else ""
+            ): selector.TextSelector(),
+            vol.Optional(
+                "icon",
+                default="",
+                description={"suggested_value": (existing.get("icon") if existing else None) or ""},
+            ): selector.TextSelector(),
+            vol.Optional(
+                "channel",
+                default=existing.get("channel", DEFAULT_CHANNEL) if existing else DEFAULT_CHANNEL,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=channel_choices, custom_value=True)
+            ),
+            vol.Optional(
+                "importance",
+                default=existing["importance"] if existing else "normal",
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=IMPORTANCE_LEVELS)),
+            vol.Optional(
+                "persistent", default=existing["persistent"] if existing else False
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                "home_only", default=existing["home_only"] if existing else False
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                "target_recipients",
+                default=existing.get("target_recipients", []) if existing else [],
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=recipient_choices, multiple=True, custom_value=True
+                )
+            ),
+        }
+        if existing:
+            schema_dict[vol.Optional("remove", default=False)] = selector.BooleanSelector()
+
+        return self.async_show_form(
+            step_id="edit_scheduled", data_schema=vol.Schema(schema_dict), errors=errors
+        )
 
 
     async def async_step_advanced(

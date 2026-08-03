@@ -38,6 +38,7 @@ MAX_ACTIONS = 3
 
 CONF_RECIPIENTS = "recipients"
 CONF_CHANNELS = "channels"
+CONF_SCHEDULED_NOTIFICATIONS = "scheduled_notifications"
 CONF_HISTORY_RETENTION_DAYS = "history_retention_days"
 CONF_HISTORY_MAX_RECORDS = "history_max_records"
 CONF_LANGUAGE = "language"
@@ -50,7 +51,8 @@ DEFAULT_LANGUAGE = "auto"
 DEFAULT_LIVE_INACTIVITY_TIMEOUT_MINUTES = 0
 DEFAULT_STORAGE_PATH = ""
 DEFAULT_STORAGE_DIR_NAME = "K93-Advanced-Notification-System"
-CUSTOM_STORAGE_FILENAME = "database.json"
+CUSTOM_STORAGE_FILENAME = "database.db"
+LEGACY_JSON_FILENAME = "database.json"
 
 SUPPORTED_LANGUAGES = ["en", "no"]
 ACK_ACTION_LABELS = {"en": "Acknowledge", "no": "Bekreft"}
@@ -60,6 +62,7 @@ def default_options() -> dict:
     """Return a fresh copy of the default options structure, seeded with the built-in channels."""
     return {
         CONF_RECIPIENTS: [],
+        CONF_SCHEDULED_NOTIFICATIONS: [],
         CONF_CHANNELS: [
             {
                 "id": str(uuid.uuid4()),
@@ -68,6 +71,8 @@ def default_options() -> dict:
                 "min_importance": channel["min_importance"],
                 "enabled": True,
                 "color": None,
+                "retention_days": None,
+                "max_records": None,
             }
             for channel in BUILTIN_CHANNELS
         ],

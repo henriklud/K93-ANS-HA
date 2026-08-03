@@ -78,9 +78,15 @@ def _resolve_language(hass: HomeAssistant, entry: ConfigEntry) -> str:
 
 
 def _build_record(
-    call: ServiceCall, ack_label: str, existing: dict[str, str] | None
+    data: dict, ack_label: str, existing: dict[str, str] | None
 ) -> NotificationRecord:
-    """Build a notification record from a send_notification service call.
+    """Build a notification record from send_notification-shaped field data.
+
+    `data` is a plain dict rather than a ServiceCall so this can be shared between the
+    send_notification service handler (`dict(call.data)`, already validated/defaulted by
+    SEND_NOTIFICATION_SCHEMA) and the cron scheduler (scheduler.py, which builds an equivalent
+    dict itself from a stored ScheduledNotification, since there's no service call to validate it
+    for that path).
 
     If `existing` is given (a live notification being refreshed - see live_id), its id and
     original creation time are reused instead of minting a new notification, so the store
@@ -91,15 +97,15 @@ def _build_record(
     """
     notification_id = existing["id"] if existing else str(uuid.uuid4())
     created = existing["created"] if existing else dt_util.utcnow().isoformat()
-    actions = list(call.data["actions"])
-    raw_channels = call.data["channel"]
+    actions = list(data["actions"])
+    raw_channels = data["channel"]
     if isinstance(raw_channels, str):
         raw_channels = [raw_channels]
     channels = [c.strip().lower().replace(" ", "_") for c in raw_channels if c and c.strip()]
     if not channels:
         channels = [DEFAULT_CHANNEL]
     channel = channels[0]
-    persistent = call.data["persistent"]
+    persistent = data["persistent"]
 
     has_ack_action = any(a["action"].startswith(ACK_ACTION_PREFIX) for a in actions)
     if persistent and not has_ack_action:
@@ -113,44 +119,56 @@ def _build_record(
         "id": notification_id,
         "created": created,
         "updated_at": dt_util.utcnow().isoformat() if existing else None,
-        "live_id": call.data.get("live_id"),
-        "title": call.data["title"],
-        "message": call.data["message"],
-        "icon": call.data.get("icon"),
-        "image": call.data.get("image"),
+        "live_id": data.get("live_id"),
+        "title": data["title"],
+        "message": data["message"],
+        "icon": data.get("icon"),
+        "image": data.get("image"),
         "channel": channel,
         "channels": channels,
-        "importance": call.data["importance"],
+        "importance": data["importance"],
         "actions": actions,
         "persistent": persistent,
-        "data": call.data["data"],
+        "data": data["data"],
         "recipients": {},
         "requires_ack": persistent,
         "acknowledged": False,
         "acknowledged_at": None,
         "acknowledged_via": None,
         "dismissed": False,
-        "source": call.data.get("source"),
-        "target_recipients": call.data.get("target_recipients"),
-        "home_only": call.data["home_only"],
-        "show_in_history": call.data["show_in_history"],
-        "dismiss_on_action": call.data["dismiss_on_action"],
-        "clear_on_acknowledge": call.data["clear_on_acknowledge"],
+        "source": data.get("source"),
+        "target_recipients": data.get("target_recipients"),
+        "home_only": data["home_only"],
+        "show_in_history": data["show_in_history"],
+        "dismiss_on_action": data["dismiss_on_action"],
+        "clear_on_acknowledge": data["clear_on_acknowledge"],
     }
+
+
+async def async_send_notification(
+    hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore, data: dict
+) -> None:
+    """Build and fire a notification event from send_notification-shaped field data.
+
+    Shared by the send_notification service handler and the cron scheduler (scheduler.py) so both
+    get identical behavior - the same live_id race-avoiding reservation, channel normalization,
+    and auto-appended Acknowledge action.
+    """
+    language = _resolve_language(hass, entry)
+    ack_label = ACK_ACTION_LABELS.get(language, ACK_ACTION_LABELS["en"])
+    live_id = data.get("live_id")
+    existing = store.async_resolve_live_notification(live_id) if live_id else None
+    record = _build_record(data, ack_label, existing)
+    if live_id:
+        store.async_reserve_live_id(live_id, record["id"], record["created"])
+    hass.bus.async_fire(EVENT_NOTIFICATION, record)
 
 
 def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore) -> None:
     """Register K93 ANS services."""
 
     async def handle_send_notification(call: ServiceCall) -> None:
-        language = _resolve_language(hass, entry)
-        ack_label = ACK_ACTION_LABELS.get(language, ACK_ACTION_LABELS["en"])
-        live_id = call.data.get("live_id")
-        existing = store.async_resolve_live_notification(live_id) if live_id else None
-        record = _build_record(call, ack_label, existing)
-        if live_id:
-            store.async_reserve_live_id(live_id, record["id"], record["created"])
-        hass.bus.async_fire(EVENT_NOTIFICATION, record)
+        await async_send_notification(hass, entry, store, dict(call.data))
 
     async def handle_acknowledge(call: ServiceCall) -> None:
         await async_acknowledge(hass, store, call.data["notification_id"], "service")

@@ -395,7 +395,7 @@ async def async_clear_inactive_live_recipients(
             changed = True
 
         if changed:
-            await store.async_save()
+            await store.async_update_record(record)
 
 
 async def async_acknowledge(

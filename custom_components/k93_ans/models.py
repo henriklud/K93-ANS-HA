@@ -68,3 +68,22 @@ class Channel(TypedDict):
     min_importance: str
     enabled: bool
     color: str | None
+    retention_days: int | None
+    max_records: int | None
+
+
+class ScheduledNotification(TypedDict):
+    """A recurring notification, fired on its own cron schedule (see scheduler.py)."""
+
+    id: str
+    name: str
+    enabled: bool
+    cron: str
+    title: str
+    message: str
+    icon: str | None
+    channel: str
+    importance: str
+    persistent: bool
+    home_only: bool
+    target_recipients: list[str]

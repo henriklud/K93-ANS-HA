@@ -4,20 +4,19 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import EntityCategory, UnitOfInformation
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_CHANNELS, CONF_RECIPIENTS, DOMAIN, SIGNAL_DELETED, SIGNAL_UPDATED
+from .const import CONF_CHANNELS, CONF_RECIPIENTS, DOMAIN
 from .models import NotificationRecord
 from .store import NotificationStore
 
-SCAN_INTERVAL = timedelta(minutes=1)
+SCAN_INTERVAL = timedelta(minutes=15)
 
 
 async def async_setup_entry(
@@ -34,6 +33,7 @@ async def async_setup_entry(
             K93AnsSentThisWeekSensor(entry, store),
             K93AnsSentThisMonthSensor(entry, store),
             K93AnsUnacknowledgedSensor(entry, store),
+            K93AnsDatabaseSizeSensor(entry, store),
         ]
     )
 
@@ -48,7 +48,14 @@ def _history_records(store: NotificationStore) -> list[NotificationRecord]:
 
 
 class K93AnsSensorBase(SensorEntity):
-    """Shared setup for K93 ANS diagnostic sensors: one device, live + polled refresh."""
+    """Shared setup for K93 ANS diagnostic sensors: one device, polled every SCAN_INTERVAL.
+
+    Deliberately not pushed live on every notification event (see SCAN_INTERVAL above) - these
+    are diagnostic/volume indicators, not real-time counters, and a state recompute on every
+    single dispatch/ack/delete was unnecessary background load. Every sensor still gets one fresh
+    read as soon as it's added, which happens whenever the integration is set up - HA starting up
+    or an options-flow save reloading the entry - without needing anything extra here.
+    """
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -66,19 +73,6 @@ class K93AnsSensorBase(SensorEntity):
             model="Advanced Notification System",
             entry_type=DeviceEntryType.SERVICE,
         )
-
-    async def async_added_to_hass(self) -> None:
-        """Refresh immediately when a notification is added/updated/deleted, not just on poll."""
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_UPDATED, self._handle_signal)
-        )
-        self.async_on_remove(
-            async_dispatcher_connect(self.hass, SIGNAL_DELETED, self._handle_signal)
-        )
-
-    @callback
-    def _handle_signal(self, *_args: Any) -> None:
-        self.async_write_ha_state()
 
 
 class K93AnsChannelsSensor(K93AnsSensorBase):
@@ -219,3 +213,24 @@ class K93AnsUnacknowledgedSensor(K93AnsSensorBase):
         return len(
             [r for r in self._store.async_list() if r["requires_ack"] and not r["acknowledged"]]
         )
+
+
+class K93AnsDatabaseSizeSensor(K93AnsSensorBase):
+    """Size of the notification history file on disk (see Storage & history in the README)."""
+
+    _attr_icon = "mdi:database-outline"
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.KILOBYTES
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, entry: ConfigEntry, store: NotificationStore) -> None:
+        super().__init__(entry, store, "database_size", "Database size")
+        self._size_bytes = 0
+
+    async def async_update(self) -> None:
+        self._size_bytes = await self.hass.async_add_executor_job(self._store.file_size_bytes)
+
+    @property
+    def native_value(self) -> int:
+        return self._size_bytes

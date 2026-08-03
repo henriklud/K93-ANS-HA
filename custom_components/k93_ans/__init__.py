@@ -9,6 +9,7 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     ACK_ACTION_PREFIX,
+    CONF_CHANNELS,
     CONF_HISTORY_MAX_RECORDS,
     CONF_HISTORY_RETENTION_DAYS,
     CONF_STORAGE_PATH,
@@ -24,6 +25,7 @@ from .dispatch import (
     async_register_persistent_notification_listener,
     async_restore_persistent_notifications,
 )
+from .scheduler import async_setup_scheduled_notifications
 from .services import async_register_services, async_unregister_services
 from .store import NotificationStore
 from .websocket_api import async_register_websocket_api
@@ -52,6 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def _on_prune(_now) -> None:
         await store.async_prune(
+            entry.options.get(CONF_CHANNELS, []),
             entry.options.get(CONF_HISTORY_MAX_RECORDS, DEFAULT_HISTORY_MAX_RECORDS),
             entry.options.get(CONF_HISTORY_RETENTION_DAYS, DEFAULT_HISTORY_RETENTION_DAYS),
         )
@@ -64,6 +67,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_prune = async_track_time_interval(hass, _on_prune, PRUNE_INTERVAL)
     unsub_inactive = async_track_time_interval(hass, _on_check_inactive, INACTIVITY_CHECK_INTERVAL)
     unsub_persistent = async_register_persistent_notification_listener(hass, store)
+    unsub_scheduled = async_setup_scheduled_notifications(hass, entry, store)
     unsub_options_update = entry.add_update_listener(_async_reload_entry)
 
     hass.data.setdefault(DOMAIN, {})
@@ -74,6 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "unsub_prune": unsub_prune,
         "unsub_inactive": unsub_inactive,
         "unsub_persistent": unsub_persistent,
+        "unsub_scheduled": unsub_scheduled,
         "unsub_options_update": unsub_options_update,
     }
 
@@ -93,6 +98,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_data["unsub_prune"]()
         entry_data["unsub_inactive"]()
         entry_data["unsub_persistent"]()
+        entry_data["unsub_scheduled"]()
         entry_data["unsub_options_update"]()
     async_unregister_services(hass)
     return unload_ok
