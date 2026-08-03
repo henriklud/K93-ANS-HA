@@ -65,7 +65,7 @@
           "history_max_records": "Maks antall i historikk",
           "language": "Språk (brukt for utgående varslingstekst, f.eks. Bekreft-knappen)",
           "live_inactivity_timeout_minutes": "Inaktivitetstidsavbrudd for direktevarsler (minutter, 0 = deaktivert) - fjerner en direktevarsel-push for en mottaker når deres interaktiv-sensor har vært \"av\" så lenge",
-          "storage_path": "Lagringsmappe for varslingshistorikk (tom = standard .storage/-plassering). Absolutt, eller relativ til Home Assistants konfigurasjonsmappe; må være skrivbar for Home Assistant. Eksisterende historikk flyttes ikke automatisk. Trer i kraft etter omstart av Home Assistant eller ved å laste inn denne integrasjonen på nytt."
+          "storage_path": "Lagringsmappe for varslingshistorikk (tom = standard K93-Advanced-Notification-System-mappe). Absolutt, eller relativ til Home Assistants konfigurasjonsmappe; må være skrivbar for Home Assistant. database.json-filen inni den heter det uansett. Eksisterende historikk flyttes automatisk. Trer i kraft med én gang du lagrer."
         }
       }
     },

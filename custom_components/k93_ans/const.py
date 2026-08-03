@@ -9,8 +9,7 @@ EVENT_NOTIFICATION = "k93_ans_notification"
 SIGNAL_UPDATED = "k93_ans_updated"
 SIGNAL_DELETED = "k93_ans_deleted"
 
-STORAGE_VERSION = 1
-STORAGE_KEY = "k93_ans_notifications"
+LEGACY_STORAGE_KEY = "k93_ans_notifications"
 
 DEFAULT_CHANNEL = "default"
 
@@ -50,7 +49,8 @@ DEFAULT_HISTORY_MAX_RECORDS = 500
 DEFAULT_LANGUAGE = "auto"
 DEFAULT_LIVE_INACTIVITY_TIMEOUT_MINUTES = 0
 DEFAULT_STORAGE_PATH = ""
-CUSTOM_STORAGE_FILENAME = "k93_ans_notifications.json"
+DEFAULT_STORAGE_DIR_NAME = "K93-Advanced-Notification-System"
+CUSTOM_STORAGE_FILENAME = "database.json"
 
 SUPPORTED_LANGUAGES = ["en", "no"]
 ACK_ACTION_LABELS = {"en": "Acknowledge", "no": "Bekreft"}

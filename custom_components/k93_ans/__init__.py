@@ -64,6 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_prune = async_track_time_interval(hass, _on_prune, PRUNE_INTERVAL)
     unsub_inactive = async_track_time_interval(hass, _on_check_inactive, INACTIVITY_CHECK_INTERVAL)
     unsub_persistent = async_register_persistent_notification_listener(hass, store)
+    unsub_options_update = entry.add_update_listener(_async_reload_entry)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
@@ -73,6 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "unsub_prune": unsub_prune,
         "unsub_inactive": unsub_inactive,
         "unsub_persistent": unsub_persistent,
+        "unsub_options_update": unsub_options_update,
     }
 
     async_register_services(hass, entry, store)
@@ -91,5 +93,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_data["unsub_prune"]()
         entry_data["unsub_inactive"]()
         entry_data["unsub_persistent"]()
+        entry_data["unsub_options_update"]()
     async_unregister_services(hass)
     return unload_ok
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the config entry after its options change."""
+    await hass.config_entries.async_reload(entry.entry_id)

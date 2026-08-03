@@ -65,7 +65,7 @@
           "history_max_records": "History max records",
           "language": "Language (used for outgoing notification text, e.g. the Acknowledge action button)",
           "live_inactivity_timeout_minutes": "Live notification inactivity timeout (minutes, 0 = disabled) - clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long",
-          "storage_path": "Notification history storage directory (blank = default .storage/ location). Absolute, or relative to the Home Assistant config directory; must be writable by Home Assistant. Existing history is not moved automatically. Takes effect after restarting Home Assistant or reloading this integration."
+          "storage_path": "Notification history storage directory (blank = default K93-Advanced-Notification-System folder). Absolute, or relative to the Home Assistant config directory; must be writable by Home Assistant. The database.json file inside it is named that regardless. Existing history is migrated automatically. Takes effect as soon as you save."
         }
       }
     },

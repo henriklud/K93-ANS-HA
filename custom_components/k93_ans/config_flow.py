@@ -307,7 +307,9 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                     "enabled", default=existing["enabled"] if existing else True
                 ): selector.BooleanSelector(),
                 vol.Optional(
-                    "color", default=(existing.get("color") if existing else None) or ""
+                    "color",
+                    default="",
+                    description={"suggested_value": (existing.get("color") if existing else None) or ""},
                 ): selector.TextSelector(),
             }
         )
@@ -370,7 +372,8 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 ),
                 vol.Optional(
                     CONF_STORAGE_PATH,
-                    default=options.get(CONF_STORAGE_PATH, ""),
+                    default="",
+                    description={"suggested_value": options.get(CONF_STORAGE_PATH, "")},
                 ): selector.TextSelector(),
             }
         )
