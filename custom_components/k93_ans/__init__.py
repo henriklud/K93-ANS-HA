@@ -25,6 +25,7 @@ from .dispatch import (
     async_register_persistent_notification_listener,
     async_restore_persistent_notifications,
 )
+from .image_capture import async_prune_orphaned_images
 from .scheduler import async_setup_scheduled_notifications
 from .services import async_register_services, async_unregister_services
 from .store import NotificationStore
@@ -58,6 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.options.get(CONF_HISTORY_MAX_RECORDS, DEFAULT_HISTORY_MAX_RECORDS),
             entry.options.get(CONF_HISTORY_RETENTION_DAYS, DEFAULT_HISTORY_RETENTION_DAYS),
         )
+        await async_prune_orphaned_images(hass, store)
 
     async def _on_check_inactive(_now) -> None:
         await async_clear_inactive_live_recipients(hass, entry, store)

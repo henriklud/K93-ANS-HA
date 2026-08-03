@@ -22,6 +22,7 @@ from .const import (
     MAX_ACTIONS,
 )
 from .dispatch import async_acknowledge, async_delete_notifications
+from .image_capture import async_capture_entity_image
 from .models import NotificationRecord
 from .store import NotificationStore
 
@@ -52,6 +53,7 @@ SEND_NOTIFICATION_SCHEMA = vol.Schema(
         vol.Required("message"): cv.string,
         vol.Optional("icon"): cv.string,
         vol.Optional("image"): cv.string,
+        vol.Optional("image_entity"): cv.entity_id,
         vol.Optional("channel", default=DEFAULT_CHANNEL): vol.Any(cv.string, [cv.string]),
         vol.Optional("importance", default=DEFAULT_IMPORTANCE): vol.In(IMPORTANCE_LEVELS),
         vol.Optional("actions", default=list): [ACTION_SCHEMA],
@@ -124,6 +126,7 @@ def _build_record(
         "message": data["message"],
         "icon": data.get("icon"),
         "image": data.get("image"),
+        "image_managed": False,
         "channel": channel,
         "channels": channels,
         "importance": data["importance"],
@@ -159,6 +162,9 @@ async def async_send_notification(
     live_id = data.get("live_id")
     existing = store.async_resolve_live_notification(live_id) if live_id else None
     record = _build_record(data, ack_label, existing)
+    image_entity = data.get("image_entity")
+    if image_entity and not record.get("image"):
+        await async_capture_entity_image(hass, record, image_entity)
     if live_id:
         store.async_reserve_live_id(live_id, record["id"], record["created"])
     hass.bus.async_fire(EVENT_NOTIFICATION, record)

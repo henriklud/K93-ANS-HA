@@ -25,6 +25,7 @@ class NotificationRecord(TypedDict):
     message: str
     icon: str | None
     image: str | None
+    image_managed: bool
     channel: str
     channels: list[str]
     importance: str

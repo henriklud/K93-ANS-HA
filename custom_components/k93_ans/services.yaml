@@ -42,6 +42,23 @@ send_notification:
       example: "/local/vacuum_map.jpg"
       selector:
         text:
+    image_entity:
+      name: Image entity
+      description: >-
+        A camera or image entity to snapshot for the picture instead of
+        supplying "image" directly. Saved under
+        /config/www/K93-Advanced-Notification-System/<channel>/, uniquely
+        named per capture, and served back as an "image" path automatically.
+        Ignored if "image" is also given - an explicit "image" always wins.
+        Old captures are cleaned up automatically once no stored notification
+        references them anymore (see the integration README).
+      required: false
+      example: "camera.front_door"
+      selector:
+        entity:
+          filter:
+            - domain: camera
+            - domain: image
     channel:
       name: Channel
       description: >-

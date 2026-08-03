@@ -54,6 +54,8 @@ DEFAULT_STORAGE_DIR_NAME = "K93-Advanced-Notification-System"
 CUSTOM_STORAGE_FILENAME = "database.db"
 LEGACY_JSON_FILENAME = "database.json"
 
+IMAGES_WEB_PATH_PREFIX = "/local/"
+
 SUPPORTED_LANGUAGES = ["en", "no"]
 ACK_ACTION_LABELS = {"en": "Acknowledge", "no": "Bekreft"}
 
