@@ -1,14 +1,25 @@
 """Storage layer for K93 ANS notification history."""
 from __future__ import annotations
 
+import json
+import logging
 from datetime import timedelta
+from pathlib import Path
+from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .const import IMPORTANCE_LEVELS, STORAGE_KEY, STORAGE_VERSION
+from .const import (
+    CUSTOM_STORAGE_FILENAME,
+    IMPORTANCE_LEVELS,
+    STORAGE_KEY,
+    STORAGE_VERSION,
+)
 from .models import NotificationRecord
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _importance_rank(level: str) -> int:
@@ -19,21 +30,88 @@ def _importance_rank(level: str) -> int:
 
 
 class NotificationStore:
-    """Wraps HA's Store helper for the notification history."""
+    """Wraps HA's Store helper for the notification history - or, if `storage_path` is set, a
+    plain JSON file written directly at `<storage_path>/k93_ans_notifications.json` instead.
 
-    def __init__(self, hass: HomeAssistant) -> None:
-        self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+    The custom-path mode intentionally forgoes everything homeassistant.helpers.storage.Store
+    normally gives you for free (debounced writes, atomic replace, storage-version migration) in
+    exchange for landing the file wherever the user actually asked for it - `Store` itself has no
+    way to do that, it always writes under `.storage/` in the HA config directory. Changing
+    `storage_path` only takes effect on the next integration setup (HA restart or reload), and
+    nothing here migrates an existing file from the old location to the new one automatically.
+    """
+
+    def __init__(self, hass: HomeAssistant, storage_path: str | None = None) -> None:
+        self._hass = hass
+        self._custom_path: Path | None = None
+        self._store: Store | None = None
+        if storage_path:
+            directory = Path(storage_path)
+            if not directory.is_absolute():
+                directory = Path(hass.config.path(storage_path))
+            self._custom_path = directory / CUSTOM_STORAGE_FILENAME
+        else:
+            self._store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._notifications: list[NotificationRecord] = []
         self._pending_live: dict[str, tuple[str, str]] = {}
 
+    def _read_custom_file(self) -> dict[str, Any] | None:
+        """Blocking read of the custom-path JSON file - call via hass.async_add_executor_job."""
+        assert self._custom_path is not None
+        if not self._custom_path.exists():
+            default_path = Path(self._hass.config.path(".storage", STORAGE_KEY))
+            if default_path.exists():
+                _LOGGER.warning(
+                    "K93 ANS: %s doesn't exist yet, but %s does - starting fresh at the new "
+                    "location; this isn't migrated automatically, copy it over yourself if you "
+                    "want to keep that history",
+                    self._custom_path,
+                    default_path,
+                )
+            return None
+        try:
+            with self._custom_path.open("r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except (OSError, ValueError):
+            _LOGGER.exception(
+                "K93 ANS failed reading notification history from %s", self._custom_path
+            )
+            return None
+
+    def _write_custom_file(self, data: dict[str, Any]) -> None:
+        """Blocking write of the custom-path JSON file - call via hass.async_add_executor_job.
+
+        Writes to a temp file and renames over the target so a crash mid-write can't leave a
+        truncated/corrupt history file behind - the same reason HA's own Store offers
+        atomic_writes.
+        """
+        assert self._custom_path is not None
+        try:
+            self._custom_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self._custom_path.with_name(self._custom_path.name + ".tmp")
+            with tmp_path.open("w", encoding="utf-8") as handle:
+                json.dump(data, handle)
+            tmp_path.replace(self._custom_path)
+        except OSError:
+            _LOGGER.exception(
+                "K93 ANS failed writing notification history to %s", self._custom_path
+            )
+
     async def async_load(self) -> None:
         """Load persisted notifications from disk."""
-        data = await self._store.async_load()
+        if self._custom_path is not None:
+            data = await self._hass.async_add_executor_job(self._read_custom_file)
+        else:
+            data = await self._store.async_load()
         self._notifications = (data or {}).get("notifications", [])
 
     async def async_save(self) -> None:
         """Persist notifications to disk."""
-        await self._store.async_save({"notifications": self._notifications})
+        data = {"notifications": self._notifications}
+        if self._custom_path is not None:
+            await self._hass.async_add_executor_job(self._write_custom_file, data)
+        else:
+            await self._store.async_save(data)
 
     async def async_add(self, record: NotificationRecord) -> None:
         """Add a new notification record, replacing one with the same id if it already exists.

@@ -11,6 +11,7 @@ from .const import (
     ACK_ACTION_PREFIX,
     CONF_HISTORY_MAX_RECORDS,
     CONF_HISTORY_RETENTION_DAYS,
+    CONF_STORAGE_PATH,
     DEFAULT_HISTORY_MAX_RECORDS,
     DEFAULT_HISTORY_RETENTION_DAYS,
     DOMAIN,
@@ -36,7 +37,7 @@ INACTIVITY_CHECK_INTERVAL = timedelta(minutes=1)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up K93 ANS from a config entry."""
-    store = NotificationStore(hass)
+    store = NotificationStore(hass, entry.options.get(CONF_STORAGE_PATH))
     await store.async_load()
     async_restore_persistent_notifications(hass, store)
 

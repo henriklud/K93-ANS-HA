@@ -17,6 +17,7 @@ from .const import (
     CONF_LANGUAGE,
     CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES,
     CONF_RECIPIENTS,
+    CONF_STORAGE_PATH,
     DOMAIN,
     IMPORTANCE_LEVELS,
     default_options,
@@ -119,31 +120,41 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             if user_input.get("remove") and existing is not None:
                 options[CONF_RECIPIENTS] = [r for r in recipients if r["id"] != existing["id"]]
+                await self._async_save()
+                return await self.async_step_init()
+
+            channel_importance = {
+                key[len(CHANNEL_IMPORTANCE_FIELD_PREFIX) :]: value
+                for key, value in user_input.items()
+                if key.startswith(CHANNEL_IMPORTANCE_FIELD_PREFIX) and value
+            }
+            new_allowed_channels = user_input.get("allowed_channels", [])
+            recipient_id = existing["id"] if existing else str(uuid.uuid4())
+            recipient = {
+                "id": recipient_id,
+                "name": user_input["name"],
+                "notify_service": user_input["notify_service"],
+                "person_entity_id": user_input.get("person_entity_id") or None,
+                "interactive_entity_id": user_input.get("interactive_entity_id") or None,
+                "min_importance": user_input["min_importance"],
+                "allowed_channels": new_allowed_channels,
+                "channel_importance": channel_importance,
+                "enabled": user_input["enabled"],
+            }
+            if existing:
+                options[CONF_RECIPIENTS] = [
+                    recipient if r["id"] == existing["id"] else r for r in recipients
+                ]
             else:
-                channel_importance = {
-                    key[len(CHANNEL_IMPORTANCE_FIELD_PREFIX) :]: value
-                    for key, value in user_input.items()
-                    if key.startswith(CHANNEL_IMPORTANCE_FIELD_PREFIX) and value
-                }
-                recipient = {
-                    "id": existing["id"] if existing else str(uuid.uuid4()),
-                    "name": user_input["name"],
-                    "notify_service": user_input["notify_service"],
-                    "person_entity_id": user_input.get("person_entity_id") or None,
-                    "interactive_entity_id": user_input.get("interactive_entity_id") or None,
-                    "min_importance": user_input["min_importance"],
-                    "allowed_channels": user_input.get("allowed_channels", []),
-                    "channel_importance": channel_importance,
-                    "enabled": user_input["enabled"],
-                }
-                if existing:
-                    options[CONF_RECIPIENTS] = [
-                        recipient if r["id"] == existing["id"] else r for r in recipients
-                    ]
-                else:
-                    options[CONF_RECIPIENTS] = [*recipients, recipient]
+                options[CONF_RECIPIENTS] = [*recipients, recipient]
 
             await self._async_save()
+
+            previous_allowed_channels = set(existing.get("allowed_channels", [])) if existing else set()
+            if set(new_allowed_channels) != previous_allowed_channels:
+                self._editing_id = recipient_id
+                return await self.async_step_edit_recipient()
+
             return await self.async_step_init()
 
         notify_services = sorted(self.hass.services.async_services().get("notify", {}).keys())
@@ -321,6 +332,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
             options[CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES] = user_input[
                 CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES
             ]
+            options[CONF_STORAGE_PATH] = user_input.get(CONF_STORAGE_PATH, "").strip()
             await self._async_save()
             return await self.async_step_init()
 
@@ -356,6 +368,10 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(min=0, mode="box")
                 ),
+                vol.Optional(
+                    CONF_STORAGE_PATH,
+                    default=options.get(CONF_STORAGE_PATH, ""),
+                ): selector.TextSelector(),
             }
         )
         return self.async_show_form(step_id="advanced", data_schema=schema)

@@ -29,7 +29,7 @@
       },
       "edit_recipient": {
         "title": "Recipient",
-        "description": "After picking \"Allowed channels\" and saving, reopen this recipient to set a per-channel minimum importance override for each one (fields named \"Importance for <channel>\") - they only appear for channels already saved in Allowed channels.",
+        "description": "Saving after adding a channel to \"Allowed channels\" reopens this form with an extra \"Importance for\" field for it, letting you override the minimum importance for just that channel.",
         "data": {
           "name": "Name",
           "notify_service": "Notify service",
@@ -64,7 +64,8 @@
           "history_retention_days": "History retention (days)",
           "history_max_records": "History max records",
           "language": "Language (used for outgoing notification text, e.g. the Acknowledge action button)",
-          "live_inactivity_timeout_minutes": "Live notification inactivity timeout (minutes, 0 = disabled) - clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long"
+          "live_inactivity_timeout_minutes": "Live notification inactivity timeout (minutes, 0 = disabled) - clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long",
+          "storage_path": "Notification history storage directory (blank = default .storage/ location). Absolute, or relative to the Home Assistant config directory; must be writable by Home Assistant. Existing history is not moved automatically. Takes effect after restarting Home Assistant or reloading this integration."
         }
       }
     },
