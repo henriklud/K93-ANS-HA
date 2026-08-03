@@ -16,11 +16,14 @@ from .const import (
     DEFAULT_STORAGE_DIR_NAME,
     IMPORTANCE_LEVELS,
     LEGACY_JSON_FILENAME,
+    LEGACY_JSON_FILENAME_ALT,
     LEGACY_STORAGE_KEY,
 )
 from .models import NotificationRecord
 
 _LOGGER = logging.getLogger(__name__)
+
+_LEGACY_JSON_FILENAMES = (LEGACY_JSON_FILENAME, LEGACY_JSON_FILENAME_ALT)
 
 
 def _importance_rank(level: str) -> int:
@@ -74,23 +77,23 @@ def _migrate_storage_dir(hass: HomeAssistant, effective_dir: Path) -> None:
     file, in case other files ever live alongside it there.
 
     This only relocates files - it doesn't care whether what it finds is the current database.db
-    or an older database.json; _import_legacy_json (see NotificationStore._load_all) handles
-    importing an old JSON file's *content* once it's sitting in the right folder.
+    or an older JSON file under any of its past names; _import_legacy_json (see
+    NotificationStore._load_all) handles importing an old JSON file's *content* once it's sitting
+    in the right folder.
     """
     db_file = effective_dir / CUSTOM_STORAGE_FILENAME
-    json_file = effective_dir / LEGACY_JSON_FILENAME
-    if db_file.exists() or json_file.exists():
+    if db_file.exists() or any((effective_dir / name).exists() for name in _LEGACY_JSON_FILENAMES):
         return
 
     default_dir = Path(hass.config.path(DEFAULT_STORAGE_DIR_NAME))
     default_db = default_dir / CUSTOM_STORAGE_FILENAME
-    default_json = default_dir / LEGACY_JSON_FILENAME
+    default_has_json = any((default_dir / name).exists() for name in _LEGACY_JSON_FILENAMES)
     legacy_file = Path(hass.config.path(".storage", LEGACY_STORAGE_KEY))
 
     source_dir: Path | None = None
     source_file: Path | None = None
     target_name = CUSTOM_STORAGE_FILENAME
-    if effective_dir != default_dir and (default_db.exists() or default_json.exists()):
+    if effective_dir != default_dir and (default_db.exists() or default_has_json):
         source_dir = default_dir
     elif legacy_file.exists():
         source_file = legacy_file
@@ -119,38 +122,63 @@ def _migrate_storage_dir(hass: HomeAssistant, effective_dir: Path) -> None:
         _LOGGER.exception("K93 ANS failed migrating notification history to %s", effective_dir)
 
 
-def _import_legacy_json(effective_dir: Path) -> list[NotificationRecord]:
-    """One-time import of pre-SQLite history (database.json) into records for database.db.
+def _extract_notifications(data: Any) -> list[NotificationRecord]:
+    """Pull the notification list out of a legacy JSON file's parsed content.
 
-    Renames the old file to "database.json.migrated" afterward, kept as a backup rather than
-    deleted - re-reading/rewriting that whole file on every event was the exact bottleneck this
-    migration exists to get away from for ongoing use, but there's no reason to touch it more than
-    this one time.
+    Two shapes are recognized: this integration's own flat format, `{"notifications": [...]}`
+    (used by both legacy JSON filenames), and homeassistant.helpers.storage.Store's own wrapper,
+    `{"version": ..., "key": ..., "data": {"notifications": [...]}}` - the very first version of
+    K93 ANS stored history via that helper, so a `.storage/k93_ans_notifications` file migrated by
+    _migrate_storage_dir still has this wrapper around it, not the flat shape.
     """
-    legacy_json = effective_dir / LEGACY_JSON_FILENAME
-    if not legacy_json.exists():
+    if not isinstance(data, dict):
         return []
-    try:
-        with legacy_json.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
-        records = data.get("notifications", [])
-    except (OSError, ValueError):
-        _LOGGER.exception("K93 ANS failed reading legacy history from %s", legacy_json)
-        return []
+    if "notifications" in data:
+        return data.get("notifications") or []
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        return inner.get("notifications") or []
+    return []
 
-    try:
-        legacy_json.rename(legacy_json.with_name(legacy_json.name + ".migrated"))
-    except OSError:
-        _LOGGER.exception(
-            "K93 ANS failed renaming legacy history file %s after migrating it", legacy_json
+
+def _import_legacy_json(effective_dir: Path) -> list[NotificationRecord]:
+    """One-time import of pre-SQLite history into records for database.db.
+
+    Checks every filename this plain-JSON format has ever been saved under (see
+    _LEGACY_JSON_FILENAMES) - newest first, though in practice at most one should ever exist at
+    once. Renames whichever file it imports to "<name>.migrated" afterward, kept as a backup
+    rather than deleted - re-reading/rewriting that whole file on every event was the exact
+    bottleneck this migration exists to get away from for ongoing use, but there's no reason to
+    touch it more than this one time.
+    """
+    for filename in _LEGACY_JSON_FILENAMES:
+        legacy_json = effective_dir / filename
+        if not legacy_json.exists():
+            continue
+
+        try:
+            with legacy_json.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            records = _extract_notifications(data)
+        except (OSError, ValueError):
+            _LOGGER.exception("K93 ANS failed reading legacy history from %s", legacy_json)
+            return []
+
+        try:
+            legacy_json.rename(legacy_json.with_name(legacy_json.name + ".migrated"))
+        except OSError:
+            _LOGGER.exception(
+                "K93 ANS failed renaming legacy history file %s after migrating it", legacy_json
+            )
+
+        _LOGGER.warning(
+            "K93 ANS migrated %d notification(s) from %s into the new SQLite database",
+            len(records),
+            legacy_json,
         )
+        return records
 
-    _LOGGER.warning(
-        "K93 ANS migrated %d notification(s) from %s into the new SQLite database",
-        len(records),
-        legacy_json,
-    )
-    return records
+    return []
 
 
 class NotificationStore:

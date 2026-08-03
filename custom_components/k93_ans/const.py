@@ -53,6 +53,7 @@ DEFAULT_STORAGE_PATH = ""
 DEFAULT_STORAGE_DIR_NAME = "K93-Advanced-Notification-System"
 CUSTOM_STORAGE_FILENAME = "database.db"
 LEGACY_JSON_FILENAME = "database.json"
+LEGACY_JSON_FILENAME_ALT = "k93_ans_notifications.json"
 
 IMAGES_WEB_PATH_PREFIX = "/local/"
 
