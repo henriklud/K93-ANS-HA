@@ -55,6 +55,7 @@ class Recipient(TypedDict):
     allowed_channels: list[str]
     enabled: bool
     person_entity_id: str | None
+    interactive_entity_id: str | None
 
 
 class Channel(TypedDict):

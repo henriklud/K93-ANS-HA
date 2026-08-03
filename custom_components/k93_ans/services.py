@@ -78,14 +78,16 @@ def _resolve_language(hass: HomeAssistant, entry: ConfigEntry) -> str:
 
 
 def _build_record(
-    call: ServiceCall, ack_label: str, existing: NotificationRecord | None
+    call: ServiceCall, ack_label: str, existing: dict[str, str] | None
 ) -> NotificationRecord:
     """Build a notification record from a send_notification service call.
 
     If `existing` is given (a live notification being refreshed - see live_id), its id and
     original creation time are reused instead of minting a new notification, so the store
     update, the persistent_notification, and the companion-app tag all refer to the same
-    underlying notification and get updated in place rather than piling up duplicates.
+    underlying notification and get updated in place rather than piling up duplicates. Only
+    `existing["id"]`/`existing["created"]` are read, so a full NotificationRecord isn't required -
+    store.async_resolve_live_notification's smaller {id, created} shape works too.
     """
     notification_id = existing["id"] if existing else str(uuid.uuid4())
     created = existing["created"] if existing else dt_util.utcnow().isoformat()
@@ -144,8 +146,10 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
         language = _resolve_language(hass, entry)
         ack_label = ACK_ACTION_LABELS.get(language, ACK_ACTION_LABELS["en"])
         live_id = call.data.get("live_id")
-        existing = store.async_get_by_live_id(live_id) if live_id else None
+        existing = store.async_resolve_live_notification(live_id) if live_id else None
         record = _build_record(call, ack_label, existing)
+        if live_id:
+            store.async_reserve_live_id(live_id, record["id"], record["created"])
         hass.bus.async_fire(EVENT_NOTIFICATION, record)
 
     async def handle_acknowledge(call: ServiceCall) -> None:

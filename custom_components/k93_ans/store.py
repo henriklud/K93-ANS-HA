@@ -24,6 +24,7 @@ class NotificationStore:
     def __init__(self, hass: HomeAssistant) -> None:
         self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._notifications: list[NotificationRecord] = []
+        self._pending_live: dict[str, tuple[str, str]] = {}
 
     async def async_load(self) -> None:
         """Load persisted notifications from disk."""
@@ -45,6 +46,9 @@ class NotificationStore:
         of sitting wherever it was first created - which matters because `async_list`'s `limit`
         would otherwise let a still-live notification silently scroll out of a bounded fetch.
         """
+        live_id = record.get("live_id")
+        if live_id and self._pending_live.get(live_id, (None, None))[0] == record["id"]:
+            del self._pending_live[live_id]
         self._notifications = [r for r in self._notifications if r["id"] != record["id"]]
         self._notifications.insert(0, record)
         await self.async_save()
@@ -62,6 +66,32 @@ class NotificationStore:
             if record.get("live_id") == live_id and not record["acknowledged"]:
                 return record
         return None
+
+    def async_resolve_live_notification(self, live_id: str) -> dict[str, str] | None:
+        """Return the {id, created} to reuse for this live_id, or None for a genuinely new session.
+
+        Checks an already-stored active record first, then falls back to a reservation made by a
+        send_notification call that's still in flight through the event pipeline (see
+        async_reserve_live_id). Without that second check, two send_notification calls for the
+        same live_id in quick succession - e.g. a burst of trigger firings right after an HA
+        restart - could both see "nothing stored yet" and each mint their own id: two distinct
+        notifications/phone pushes for what should be one live session, with only the second ever
+        receiving further updates (the first is silently orphaned).
+        """
+        existing = self.async_get_by_live_id(live_id)
+        if existing:
+            return {"id": existing["id"], "created": existing["created"]}
+        pending = self._pending_live.get(live_id)
+        if pending:
+            return {"id": pending[0], "created": pending[1]}
+        return None
+
+    def async_reserve_live_id(self, live_id: str, notification_id: str, created: str) -> None:
+        """Record that `notification_id` is the id in use for `live_id`, before it's stored.
+
+        Cleared automatically once that id is actually stored (see async_add).
+        """
+        self._pending_live[live_id] = (notification_id, created)
 
     def async_list(
         self,

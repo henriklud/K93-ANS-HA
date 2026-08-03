@@ -33,6 +33,7 @@
           "name": "Navn",
           "notify_service": "Varslingstjeneste",
           "person_entity_id": "Person (valgfritt - kreves for \"kun hjemme\"-varsler)",
+          "interactive_entity_id": "Interaktiv-sensor (valgfritt - en binary_sensor som er \"på\" mens denne mottakerens telefon er i bruk; kreves for inaktivitetstidsavbruddet for direktevarsler nedenfor)",
           "min_importance": "Minimum viktighet",
           "allowed_channels": "Tillatte kanaler (tom = alle)",
           "enabled": "Aktivert",
@@ -61,7 +62,8 @@
         "data": {
           "history_retention_days": "Lagringstid for historikk (dager)",
           "history_max_records": "Maks antall i historikk",
-          "language": "Språk (brukt for utgående varslingstekst, f.eks. Bekreft-knappen)"
+          "language": "Språk (brukt for utgående varslingstekst, f.eks. Bekreft-knappen)",
+          "live_inactivity_timeout_minutes": "Inaktivitetstidsavbrudd for direktevarsler (minutter, 0 = deaktivert) - fjerner en direktevarsel-push for en mottaker når deres interaktiv-sensor har vært \"av\" så lenge"
         }
       }
     },

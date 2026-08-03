@@ -18,6 +18,7 @@ from .const import (
 )
 from .dispatch import (
     async_acknowledge,
+    async_clear_inactive_live_recipients,
     async_handle_notification_event,
     async_register_persistent_notification_listener,
     async_restore_persistent_notifications,
@@ -30,6 +31,7 @@ PLATFORMS: list[str] = ["sensor"]
 
 MOBILE_APP_ACTION_EVENT = "mobile_app_notification_action"
 PRUNE_INTERVAL = timedelta(hours=1)
+INACTIVITY_CHECK_INTERVAL = timedelta(minutes=1)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -53,9 +55,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.options.get(CONF_HISTORY_RETENTION_DAYS, DEFAULT_HISTORY_RETENTION_DAYS),
         )
 
+    async def _on_check_inactive(_now) -> None:
+        await async_clear_inactive_live_recipients(hass, entry, store)
+
     unsub_event = hass.bus.async_listen(EVENT_NOTIFICATION, _on_notification_event)
     unsub_action = hass.bus.async_listen(MOBILE_APP_ACTION_EVENT, _on_mobile_action)
     unsub_prune = async_track_time_interval(hass, _on_prune, PRUNE_INTERVAL)
+    unsub_inactive = async_track_time_interval(hass, _on_check_inactive, INACTIVITY_CHECK_INTERVAL)
     unsub_persistent = async_register_persistent_notification_listener(hass, store)
 
     hass.data.setdefault(DOMAIN, {})
@@ -64,6 +70,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "unsub_event": unsub_event,
         "unsub_action": unsub_action,
         "unsub_prune": unsub_prune,
+        "unsub_inactive": unsub_inactive,
         "unsub_persistent": unsub_persistent,
     }
 
@@ -81,6 +88,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_data["unsub_event"]()
         entry_data["unsub_action"]()
         entry_data["unsub_prune"]()
+        entry_data["unsub_inactive"]()
         entry_data["unsub_persistent"]()
     async_unregister_services(hass)
     return unload_ok

@@ -33,6 +33,7 @@
           "name": "Name",
           "notify_service": "Notify service",
           "person_entity_id": "Person (optional - required for \"home only\" notifications)",
+          "interactive_entity_id": "Interactive sensor (optional - a binary_sensor that's \"on\" while this recipient's phone is in use; required for the live notification inactivity timeout below)",
           "min_importance": "Minimum importance",
           "allowed_channels": "Allowed channels (empty = all)",
           "enabled": "Enabled",
@@ -61,7 +62,8 @@
         "data": {
           "history_retention_days": "History retention (days)",
           "history_max_records": "History max records",
-          "language": "Language (used for outgoing notification text, e.g. the Acknowledge action button)"
+          "language": "Language (used for outgoing notification text, e.g. the Acknowledge action button)",
+          "live_inactivity_timeout_minutes": "Live notification inactivity timeout (minutes, 0 = disabled) - clears a live notification's push for a recipient once their interactive sensor has been \"off\" this long"
         }
       }
     },

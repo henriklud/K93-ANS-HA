@@ -15,6 +15,7 @@ from .const import (
     CONF_HISTORY_MAX_RECORDS,
     CONF_HISTORY_RETENTION_DAYS,
     CONF_LANGUAGE,
+    CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES,
     CONF_RECIPIENTS,
     DOMAIN,
     IMPORTANCE_LEVELS,
@@ -123,6 +124,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                     "name": user_input["name"],
                     "notify_service": user_input["notify_service"],
                     "person_entity_id": user_input.get("person_entity_id") or None,
+                    "interactive_entity_id": user_input.get("interactive_entity_id") or None,
                     "min_importance": user_input["min_importance"],
                     "allowed_channels": user_input.get("allowed_channels", []),
                     "enabled": user_input["enabled"],
@@ -157,6 +159,10 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 "person_entity_id",
                 default=(existing.get("person_entity_id") if existing else None),
             ): selector.EntitySelector(selector.EntitySelectorConfig(domain="person")),
+            vol.Optional(
+                "interactive_entity_id",
+                default=(existing.get("interactive_entity_id") if existing else None),
+            ): selector.EntitySelector(selector.EntitySelectorConfig(domain="binary_sensor")),
             vol.Optional(
                 "min_importance",
                 default=existing["min_importance"] if existing else "normal",
@@ -290,6 +296,9 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
             options[CONF_HISTORY_RETENTION_DAYS] = user_input[CONF_HISTORY_RETENTION_DAYS]
             options[CONF_HISTORY_MAX_RECORDS] = user_input[CONF_HISTORY_MAX_RECORDS]
             options[CONF_LANGUAGE] = user_input[CONF_LANGUAGE]
+            options[CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES] = user_input[
+                CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES
+            ]
             await self._async_save()
             return await self.async_step_init()
 
@@ -318,6 +327,12 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                             {"value": "no", "label": "Norsk"},
                         ]
                     )
+                ),
+                vol.Optional(
+                    CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES,
+                    default=options[CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES],
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(min=0, mode="box")
                 ),
             }
         )

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 from typing import Any, Callable
 
 from homeassistant.components import persistent_notification
@@ -11,7 +12,7 @@ from homeassistant.components.persistent_notification import (
     UpdateType,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_HOME
+from homeassistant.const import STATE_HOME, STATE_OFF
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
@@ -20,6 +21,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     ANDROID_IMPORTANCE_MAP,
     CONF_CHANNELS,
+    CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES,
     CONF_RECIPIENTS,
     DEFAULT_CHANNEL,
     IMPORTANCE_LEVELS,
@@ -259,6 +261,43 @@ def async_restore_persistent_notifications(hass: HomeAssistant, store: Notificat
             _create_persistent_notification(hass, record)
 
 
+async def _send_clear_notification(hass: HomeAssistant, notify_service: str, record_id: str) -> None:
+    """Send the clear_notification command for one tag to one companion-app target.
+
+    blocking=True (unlike the fire-and-forget original dispatch) so a failure in the notify
+    platform itself actually raises here instead of being swallowed in a background task we never
+    awaited - that swallowing is why earlier failures never showed up in our own log. One retry
+    after a short delay covers a transient hiccup talking to FCM/APNs, the most likely cause of an
+    occasional silent no-op.
+    """
+    for attempt in (1, 2):
+        try:
+            _LOGGER.debug(
+                "K93 ANS sending clear_notification to notify.%s for %s (attempt %d)",
+                notify_service,
+                record_id,
+                attempt,
+            )
+            await hass.services.async_call(
+                "notify",
+                notify_service,
+                {"message": "clear_notification", "data": {"tag": record_id}},
+                blocking=True,
+            )
+            return
+        except Exception:
+            if attempt == 1:
+                _LOGGER.warning(
+                    "K93 ANS clear_notification to notify.%s failed, retrying once",
+                    notify_service,
+                )
+                await asyncio.sleep(2)
+            else:
+                _LOGGER.exception(
+                    "K93 ANS failed clearing pushed notification on notify.%s", notify_service
+                )
+
+
 async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationRecord) -> None:
     """Clear the pushed notification on every companion-app recipient that received it.
 
@@ -275,47 +314,83 @@ async def _clear_mobile_notifications(hass: HomeAssistant, record: NotificationR
     for delivery in recipients.values():
         notify_service = delivery.get("notify_service")
         if not delivery.get("dispatched") or not notify_service:
-            _LOGGER.debug(
-                "K93 ANS skip clear for %s: dispatched=%s notify_service=%s",
+            _LOGGER.warning(
+                "K93 ANS: not clearing %s on notify.%s - it was never dispatched there "
+                "(dispatched=%s)",
                 record["id"],
-                delivery.get("dispatched"),
                 notify_service,
+                delivery.get("dispatched"),
             )
             continue
         if not _is_mobile_app_target(notify_service):
-            _LOGGER.debug(
-                "K93 ANS skip clear for %s: notify.%s is not a mobile_app target",
+            _LOGGER.warning(
+                "K93 ANS: not clearing %s on notify.%s - not recognized as a mobile_app target "
+                "(only notify.mobile_app_* services get the clear_notification command)",
                 record["id"],
                 notify_service,
             )
             continue
-        for attempt in (1, 2):
-            try:
-                _LOGGER.debug(
-                    "K93 ANS sending clear_notification to notify.%s for %s (attempt %d)",
-                    notify_service,
-                    record["id"],
-                    attempt,
-                )
-                await hass.services.async_call(
-                    "notify",
-                    notify_service,
-                    {"message": "clear_notification", "data": {"tag": record["id"]}},
-                    blocking=True,
-                )
-                break
-            except Exception:
-                if attempt == 1:
-                    _LOGGER.warning(
-                        "K93 ANS clear_notification to notify.%s failed, retrying once",
-                        notify_service,
-                    )
-                    await asyncio.sleep(2)
-                else:
-                    _LOGGER.exception(
-                        "K93 ANS failed clearing pushed notification on notify.%s",
-                        notify_service,
-                    )
+        await _send_clear_notification(hass, notify_service, record["id"])
+
+
+async def async_clear_inactive_live_recipients(
+    hass: HomeAssistant, entry: ConfigEntry, store: NotificationStore
+) -> None:
+    """Clear a live notification's push for any recipient whose phone has gone inactive.
+
+    Called periodically (see __init__.py). Only touches still-live (unacknowledged, has a
+    live_id) notifications, and only recipients with an interactive_entity_id configured and a
+    non-zero CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES - both opt-in, so this is a no-op for anyone who
+    hasn't set it up. Clears just that one recipient's push (not the whole notification, and
+    without marking it acknowledged) - other recipients, and the record's own live session,
+    aren't affected; a later real update/end_live_notification still reaches everyone as usual.
+    """
+    timeout_minutes = entry.options.get(CONF_LIVE_INACTIVITY_TIMEOUT_MINUTES) or 0
+    if timeout_minutes <= 0:
+        return
+
+    recipient_defs = {r["id"]: r for r in entry.options.get(CONF_RECIPIENTS, [])}
+    timeout = timedelta(minutes=timeout_minutes)
+    now = dt_util.utcnow()
+
+    for record in store.async_list():
+        if not record.get("live_id") or record.get("acknowledged"):
+            continue
+
+        deliveries = record.get("recipients") or {}
+        changed = False
+        for recipient_id, delivery in deliveries.items():
+            notify_service = delivery.get("notify_service")
+            if not delivery.get("dispatched") or not notify_service:
+                continue
+            if not _is_mobile_app_target(notify_service):
+                continue
+
+            recipient = recipient_defs.get(recipient_id)
+            interactive_entity_id = recipient.get("interactive_entity_id") if recipient else None
+            if not interactive_entity_id:
+                continue
+
+            state = hass.states.get(interactive_entity_id)
+            if state is None or state.state != STATE_OFF:
+                continue
+            if now - state.last_changed < timeout:
+                continue
+
+            _LOGGER.info(
+                "K93 ANS clearing live notification %s on notify.%s - %s has been inactive "
+                "for over %d minute(s)",
+                record["id"],
+                notify_service,
+                interactive_entity_id,
+                timeout_minutes,
+            )
+            await _send_clear_notification(hass, notify_service, record["id"])
+            delivery["dispatched"] = False
+            changed = True
+
+        if changed:
+            await store.async_save()
 
 
 async def async_acknowledge(
@@ -329,12 +404,13 @@ async def async_acknowledge(
     record = await store.async_acknowledge(notification_id, via)
     if record is None:
         return None
-    _LOGGER.debug(
+    clear_on_acknowledge = record.get("clear_on_acknowledge", True)
+    _LOGGER.warning(
         "K93 ANS acknowledge %s via=%s persistent=%s clear_on_acknowledge=%s",
         notification_id,
         via,
         record.get("persistent"),
-        record.get("clear_on_acknowledge", True),
+        clear_on_acknowledge,
     )
     if record.get("persistent"):
         try:
@@ -343,7 +419,7 @@ async def async_acknowledge(
             _LOGGER.exception(
                 "K93 ANS failed dismissing persistent_notification %s", notification_id
             )
-    if record.get("clear_on_acknowledge", True):
+    if clear_on_acknowledge:
         await _clear_mobile_notifications(hass, record)
     async_dispatcher_send(hass, SIGNAL_UPDATED, record)
     return record
