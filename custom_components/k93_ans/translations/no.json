@@ -156,7 +156,8 @@
     },
     "error": {
       "duplicate_key": "En kanal med denne nøkkelen finnes allerede.",
-      "invalid_cron": "Ikke et gyldig cron-uttrykk."
+      "invalid_cron": "Ikke et gyldig cron-uttrykk.",
+      "unknown": "Uventet feil ved lagring - sjekk Home Assistant-loggen for detaljer."
     }
   }
 }

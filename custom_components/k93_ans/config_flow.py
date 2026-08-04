@@ -1,6 +1,7 @@
 """Config and options flow for K93 ANS."""
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any
 
@@ -27,6 +28,8 @@ from .const import (
     IMPORTANCE_LEVELS,
     default_options,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 ADD_NEW = "__add_new__"
 CHANNEL_IMPORTANCE_FIELD_PREFIX = "importance_for_"
@@ -274,40 +277,50 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            if user_input.get("remove") and existing is not None:
-                options[CONF_CHANNELS] = [c for c in channels if c["id"] != existing["id"]]
-                await self._async_save()
-                return await self.async_step_init()
+            try:
+                if user_input.get("remove") and existing is not None:
+                    options[CONF_CHANNELS] = [c for c in channels if c["id"] != existing["id"]]
+                    await self._async_save()
+                    return await self.async_step_init()
 
-            key = user_input["key"].strip().lower().replace(" ", "_")
-            duplicate = any(
-                c["key"] == key and (existing is None or c["id"] != existing["id"])
-                for c in channels
-            )
-            if duplicate:
-                errors["key"] = "duplicate_key"
-            else:
-                retention_days = user_input.get("retention_days")
-                max_records = user_input.get("max_records")
-                channel = {
-                    "id": existing["id"] if existing else str(uuid.uuid4()),
-                    "key": key,
-                    "name": user_input["name"],
-                    "min_importance": user_input["min_importance"],
-                    "enabled": user_input["enabled"],
-                    "color": user_input.get("color") or None,
-                    "retention_days": int(retention_days) if retention_days not in (None, "") else None,
-                    "max_records": int(max_records) if max_records not in (None, "") else None,
-                }
-                if existing:
-                    options[CONF_CHANNELS] = [
-                        channel if c["id"] == existing["id"] else c for c in channels
-                    ]
+                key = user_input["key"].strip().lower().replace(" ", "_")
+                duplicate = any(
+                    c["key"] == key and (existing is None or c["id"] != existing["id"])
+                    for c in channels
+                )
+                if duplicate:
+                    errors["key"] = "duplicate_key"
                 else:
-                    options[CONF_CHANNELS] = [*channels, channel]
+                    retention_days = user_input.get("retention_days")
+                    max_records = user_input.get("max_records")
+                    channel = {
+                        "id": existing["id"] if existing else str(uuid.uuid4()),
+                        "key": key,
+                        "name": user_input["name"],
+                        "min_importance": user_input["min_importance"],
+                        "enabled": user_input["enabled"],
+                        "color": user_input.get("color") or None,
+                        "retention_days": int(retention_days)
+                        if retention_days not in (None, "")
+                        else None,
+                        "max_records": int(max_records) if max_records not in (None, "") else None,
+                    }
+                    if existing:
+                        options[CONF_CHANNELS] = [
+                            channel if c["id"] == existing["id"] else c for c in channels
+                        ]
+                    else:
+                        options[CONF_CHANNELS] = [*channels, channel]
 
-                await self._async_save()
-                return await self.async_step_init()
+                    await self._async_save()
+                    return await self.async_step_init()
+            except Exception:
+                _LOGGER.exception(
+                    "K93 ANS: failed saving channel (existing=%s, user_input=%s)",
+                    existing,
+                    user_input,
+                )
+                errors["base"] = "unknown"
 
         schema = vol.Schema(
             {

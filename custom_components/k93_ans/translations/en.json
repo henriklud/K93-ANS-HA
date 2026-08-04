@@ -156,7 +156,8 @@
     },
     "error": {
       "duplicate_key": "A channel with this key already exists.",
-      "invalid_cron": "Not a valid cron expression."
+      "invalid_cron": "Not a valid cron expression.",
+      "unknown": "Unexpected error saving - check the Home Assistant log for details."
     }
   }
 }
