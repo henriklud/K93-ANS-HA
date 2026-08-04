@@ -64,59 +64,43 @@ def _resolve_storage_dir(hass: HomeAssistant, storage_path: str | None) -> Path:
 
 
 def _migrate_storage_dir(hass: HomeAssistant, effective_dir: Path) -> None:
-    """Move existing history into effective_dir if it's still at a known previous location.
+    """Move the previous default folder's contents into effective_dir if storage_path was just
+    pointed somewhere else and effective_dir doesn't have its own database yet.
 
-    Only two previous locations are recognized, both filesystem-detectable without needing any
-    persisted "where did we load from last time" bookkeeping (which would risk feeding back into
-    the options-change reload listener - see __init__.py): the default dedicated folder itself
-    (relevant if `storage_path` is later pointed somewhere else) and the pre-dedicated-folder,
-    pre-SQLite default (`.storage/k93_ans_notifications`, from HA's own Store helper - relevant
-    when first upgrading to a version with a dedicated folder at all). Moving directly between two
-    different custom paths isn't migrated automatically - there's no reliable way to know what the
-    previous custom path even was. Everything in a migrated folder moves, not just the history
-    file, in case other files ever live alongside it there.
+    This only handles the "storage_path changed" case - relocating an entire folder's worth of
+    files (not just history) from the default dedicated folder to a newly-chosen custom one.
+    Moving directly between two different custom paths isn't migrated automatically - there's no
+    reliable way to know what the previous custom path even was.
 
-    This only relocates files - it doesn't care whether what it finds is the current database.db
-    or an older JSON file under any of its past names; _import_legacy_json (see
-    NotificationStore._load_all) handles importing an old JSON file's *content* once it's sitting
-    in the right folder.
+    Recovering the pre-dedicated-folder, pre-SQLite `.storage/k93_ans_notifications` file (from
+    HA's own Store helper) is handled separately by _import_legacy_json, not here - deliberately
+    not gated on whether database.db already exists, since an earlier version of this migration
+    logic could leave a *blank* database.db behind (e.g. it failed to unwrap Store's wrapper
+    format and imported zero records) which would otherwise permanently block recovery on every
+    later load. See _import_legacy_json's docstring.
     """
     db_file = effective_dir / CUSTOM_STORAGE_FILENAME
     if db_file.exists() or any((effective_dir / name).exists() for name in _LEGACY_JSON_FILENAMES):
         return
 
     default_dir = Path(hass.config.path(DEFAULT_STORAGE_DIR_NAME))
+    if effective_dir == default_dir:
+        return
     default_db = default_dir / CUSTOM_STORAGE_FILENAME
     default_has_json = any((default_dir / name).exists() for name in _LEGACY_JSON_FILENAMES)
-    legacy_file = Path(hass.config.path(".storage", LEGACY_STORAGE_KEY))
-
-    source_dir: Path | None = None
-    source_file: Path | None = None
-    target_name = CUSTOM_STORAGE_FILENAME
-    if effective_dir != default_dir and (default_db.exists() or default_has_json):
-        source_dir = default_dir
-    elif legacy_file.exists():
-        source_file = legacy_file
-        target_name = LEGACY_JSON_FILENAME
-    else:
+    if not (default_db.exists() or default_has_json):
         return
 
     try:
         effective_dir.mkdir(parents=True, exist_ok=True)
-        if source_dir is not None:
-            for item in source_dir.iterdir():
-                item.rename(effective_dir / item.name)
-            try:
-                source_dir.rmdir()
-            except OSError:
-                pass
-        else:
-            assert source_file is not None
-            source_file.rename(effective_dir / target_name)
+        for item in default_dir.iterdir():
+            item.rename(effective_dir / item.name)
+        try:
+            default_dir.rmdir()
+        except OSError:
+            pass
         _LOGGER.warning(
-            "K93 ANS migrated notification history from %s to %s",
-            source_dir or source_file,
-            effective_dir,
+            "K93 ANS migrated notification history from %s to %s", default_dir, effective_dir
         )
     except OSError:
         _LOGGER.exception("K93 ANS failed migrating notification history to %s", effective_dir)
@@ -128,8 +112,8 @@ def _extract_notifications(data: Any) -> list[NotificationRecord]:
     Two shapes are recognized: this integration's own flat format, `{"notifications": [...]}`
     (used by both legacy JSON filenames), and homeassistant.helpers.storage.Store's own wrapper,
     `{"version": ..., "key": ..., "data": {"notifications": [...]}}` - the very first version of
-    K93 ANS stored history via that helper, so a `.storage/k93_ans_notifications` file migrated by
-    _migrate_storage_dir still has this wrapper around it, not the flat shape.
+    K93 ANS stored history via that helper, so `.storage/k93_ans_notifications` still has this
+    wrapper around it, not the flat shape.
     """
     if not isinstance(data, dict):
         return []
@@ -141,40 +125,73 @@ def _extract_notifications(data: Any) -> list[NotificationRecord]:
     return []
 
 
-def _import_legacy_json(effective_dir: Path) -> list[NotificationRecord]:
-    """One-time import of pre-SQLite history into records for database.db.
+def _candidate_legacy_paths(hass: HomeAssistant, effective_dir: Path) -> list[Path]:
+    """Every location plain-JSON (or the original Store-wrapped file) history has ever lived at,
+    in the order they should be tried.
 
-    Checks every filename this plain-JSON format has ever been saved under (see
-    _LEGACY_JSON_FILENAMES) - newest first, though in practice at most one should ever exist at
-    once. Renames whichever file it imports to "<name>.migrated" afterward, kept as a backup
-    rather than deleted - re-reading/rewriting that whole file on every event was the exact
-    bottleneck this migration exists to get away from for ongoing use, but there's no reason to
-    touch it more than this one time.
+    Checked directly every time the SQLite table is found empty - deliberately *not* gated on any
+    "has this already been relocated/renamed" bookkeeping. This integration has been through
+    several storage-format changes (raw Store file -> flat JSON in a dedicated folder, under two
+    different filenames -> SQLite), so a real instance can have leftover files in almost any
+    combination, including a "<name>.migrated" backup that itself has zero records in it because
+    an earlier version of this migration logic failed to unwrap Store's own wrapper format before
+    renaming the source away. Re-checking those backups too means that specific past bug is
+    self-healing on the next load instead of permanently stranding the original history.
     """
-    for filename in _LEGACY_JSON_FILENAMES:
-        legacy_json = effective_dir / filename
-        if not legacy_json.exists():
+    dirs = [effective_dir]
+    default_dir = Path(hass.config.path(DEFAULT_STORAGE_DIR_NAME))
+    if default_dir != effective_dir:
+        dirs.append(default_dir)
+
+    paths: list[Path] = []
+    for directory in dirs:
+        for name in _LEGACY_JSON_FILENAMES:
+            paths.append(directory / name)
+            paths.append(directory / f"{name}.migrated")
+    paths.append(Path(hass.config.path(".storage", LEGACY_STORAGE_KEY)))
+    return paths
+
+
+def _import_legacy_json(hass: HomeAssistant, effective_dir: Path) -> list[NotificationRecord]:
+    """Recover pre-SQLite history from whichever known legacy location actually has it.
+
+    Tries every filename/location this history has ever lived under - see
+    _candidate_legacy_paths - in order, stopping at the first one that yields at least one record
+    (a candidate that exists but is empty, unreadable, or in an unrecognized shape is skipped
+    rather than treated as final, so a stale empty file can't hide real history sitting at the
+    next candidate). Renames whichever file it imports from to "<name>.migrated" in place
+    afterward (if not already suffixed that way), kept as a backup rather than deleted -
+    re-reading/rewriting that whole file on every event was the exact bottleneck this migration
+    exists to get away from for ongoing use, but there's no reason to touch it more than this one
+    time.
+    """
+    for legacy_path in _candidate_legacy_paths(hass, effective_dir):
+        if not legacy_path.exists():
             continue
 
         try:
-            with legacy_json.open("r", encoding="utf-8") as handle:
+            with legacy_path.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
             records = _extract_notifications(data)
         except (OSError, ValueError):
-            _LOGGER.exception("K93 ANS failed reading legacy history from %s", legacy_json)
-            return []
+            _LOGGER.exception("K93 ANS failed reading legacy history from %s", legacy_path)
+            continue
+        if not records:
+            continue
 
-        try:
-            legacy_json.rename(legacy_json.with_name(legacy_json.name + ".migrated"))
-        except OSError:
-            _LOGGER.exception(
-                "K93 ANS failed renaming legacy history file %s after migrating it", legacy_json
-            )
+        if not legacy_path.name.endswith(".migrated"):
+            try:
+                legacy_path.rename(legacy_path.with_name(legacy_path.name + ".migrated"))
+            except OSError:
+                _LOGGER.exception(
+                    "K93 ANS failed renaming legacy history file %s after migrating it",
+                    legacy_path,
+                )
 
         _LOGGER.warning(
             "K93 ANS migrated %d notification(s) from %s into the new SQLite database",
             len(records),
-            legacy_json,
+            legacy_path,
         )
         return records
 
@@ -249,7 +266,7 @@ class NotificationStore:
         records: list[NotificationRecord] = [json.loads(row[0]) for row in rows]
 
         if not records:
-            imported = _import_legacy_json(self._dir)
+            imported = _import_legacy_json(self._hass, self._dir)
             for record in imported:
                 self._upsert(record)
             records = sorted(imported, key=lambda r: r["created"], reverse=True)
