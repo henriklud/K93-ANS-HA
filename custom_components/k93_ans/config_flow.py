@@ -342,14 +342,12 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 ): selector.TextSelector(),
                 vol.Optional(
                     "retention_days",
-                    default=None,
                     description={
                         "suggested_value": existing.get("retention_days") if existing else None
                     },
                 ): selector.NumberSelector(selector.NumberSelectorConfig(min=1, mode="box")),
                 vol.Optional(
                     "max_records",
-                    default=None,
                     description={
                         "suggested_value": existing.get("max_records") if existing else None
                     },
