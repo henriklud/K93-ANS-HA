@@ -125,18 +125,25 @@ def _extract_notifications(data: Any) -> list[NotificationRecord]:
     return []
 
 
-def _candidate_legacy_paths(hass: HomeAssistant, effective_dir: Path) -> list[Path]:
+def _candidate_legacy_paths(
+    hass: HomeAssistant, effective_dir: Path, *, include_migrated_backups: bool
+) -> list[Path]:
     """Every location plain-JSON (or the original Store-wrapped file) history has ever lived at,
     in the order they should be tried.
 
-    Checked directly every time the SQLite table is found empty - deliberately *not* gated on any
-    "has this already been relocated/renamed" bookkeeping. This integration has been through
+    Deliberately *not* gated on any "has this already been relocated/renamed" bookkeeping - only
+    on whether the file itself still exists under a not-yet-".migrated" name (which is the actual
+    signal that it hasn't been successfully consumed yet). This integration has been through
     several storage-format changes (raw Store file -> flat JSON in a dedicated folder, under two
     different filenames -> SQLite), so a real instance can have leftover files in almost any
-    combination, including a "<name>.migrated" backup that itself has zero records in it because
-    an earlier version of this migration logic failed to unwrap Store's own wrapper format before
-    renaming the source away. Re-checking those backups too means that specific past bug is
-    self-healing on the next load instead of permanently stranding the original history.
+    combination.
+
+    include_migrated_backups additionally re-checks the already-renamed "<name>.migrated" copies -
+    a past version of this migration could rename a source away without actually importing
+    anything usable from it (e.g. it didn't unwrap Store's own wrapper format), which would
+    otherwise strand that history forever. The caller only passes this when the notifications
+    table is still completely empty, so a record deliberately deleted by the user can't keep
+    reappearing on every restart just because its old backup file is still sitting there.
     """
     dirs = [effective_dir]
     default_dir = Path(hass.config.path(DEFAULT_STORAGE_DIR_NAME))
@@ -147,25 +154,36 @@ def _candidate_legacy_paths(hass: HomeAssistant, effective_dir: Path) -> list[Pa
     for directory in dirs:
         for name in _LEGACY_JSON_FILENAMES:
             paths.append(directory / name)
-            paths.append(directory / f"{name}.migrated")
-    paths.append(Path(hass.config.path(".storage", LEGACY_STORAGE_KEY)))
+            if include_migrated_backups:
+                paths.append(directory / f"{name}.migrated")
+    ancient_file = Path(hass.config.path(".storage", LEGACY_STORAGE_KEY))
+    paths.append(ancient_file)
+    if include_migrated_backups:
+        paths.append(ancient_file.with_name(ancient_file.name + ".migrated"))
     return paths
 
 
-def _import_legacy_json(hass: HomeAssistant, effective_dir: Path) -> list[NotificationRecord]:
-    """Recover pre-SQLite history from whichever known legacy location actually has it.
+def _import_legacy_json(
+    hass: HomeAssistant, effective_dir: Path, *, include_migrated_backups: bool = True
+) -> list[NotificationRecord]:
+    """Recover pre-SQLite history from every known legacy location that actually has it.
 
-    Tries every filename/location this history has ever lived under - see
-    _candidate_legacy_paths - in order, stopping at the first one that yields at least one record
-    (a candidate that exists but is empty, unreadable, or in an unrecognized shape is skipped
-    rather than treated as final, so a stale empty file can't hide real history sitting at the
-    next candidate). Renames whichever file it imports from to "<name>.migrated" in place
-    afterward (if not already suffixed that way), kept as a backup rather than deleted -
-    re-reading/rewriting that whole file on every event was the exact bottleneck this migration
-    exists to get away from for ongoing use, but there's no reason to touch it more than this one
-    time.
+    Checks every filename/location this history has ever lived under - see
+    _candidate_legacy_paths - and accumulates records from *all* of them that yield at least one
+    (not just the first hit), deduped by id, since more than one can genuinely hold different real
+    history at once (this integration has changed storage format several times over its life). A
+    candidate that exists but is empty, unreadable, or in an unrecognized shape is skipped rather
+    than treated as final, so it can't hide real history sitting at another candidate.
+
+    Renames whichever file(s) it successfully imports from to "<name>.migrated" in place
+    afterward, kept as a backup rather than deleted - re-reading/rewriting that whole file on
+    every event was the exact bottleneck this migration exists to get away from for ongoing use,
+    but there's no reason to touch it more than this one time.
     """
-    for legacy_path in _candidate_legacy_paths(hass, effective_dir):
+    collected: dict[str, NotificationRecord] = {}
+    for legacy_path in _candidate_legacy_paths(
+        hass, effective_dir, include_migrated_backups=include_migrated_backups
+    ):
         if not legacy_path.exists():
             continue
 
@@ -178,6 +196,9 @@ def _import_legacy_json(hass: HomeAssistant, effective_dir: Path) -> list[Notifi
             continue
         if not records:
             continue
+
+        for record in records:
+            collected.setdefault(record["id"], record)
 
         if not legacy_path.name.endswith(".migrated"):
             try:
@@ -193,9 +214,8 @@ def _import_legacy_json(hass: HomeAssistant, effective_dir: Path) -> list[Notifi
             len(records),
             legacy_path,
         )
-        return records
 
-    return []
+    return list(collected.values())
 
 
 class NotificationStore:
@@ -265,11 +285,13 @@ class NotificationStore:
             conn.close()
         records: list[NotificationRecord] = [json.loads(row[0]) for row in rows]
 
-        if not records:
-            imported = _import_legacy_json(self._hass, self._dir)
+        imported = _import_legacy_json(self._hass, self._dir, include_migrated_backups=not records)
+        if imported:
             for record in imported:
                 self._upsert(record)
-            records = sorted(imported, key=lambda r: r["created"], reverse=True)
+            existing_ids = {record["id"] for record in records}
+            records = records + [record for record in imported if record["id"] not in existing_ids]
+            records.sort(key=lambda r: r["created"], reverse=True)
 
         return records
 
