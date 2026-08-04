@@ -18,6 +18,7 @@
           "manage_recipients": "Manage recipients",
           "manage_channels": "Manage channels",
           "manage_scheduled": "Manage scheduled notifications",
+          "manage_calendar": "Manage calendar notifications",
           "advanced": "Advanced",
           "finish": "Done"
         }
@@ -98,6 +99,40 @@
         "data_description": {
           "cron": "Standard 5-field cron syntax. Evaluated in Home Assistant's own local time.",
           "icon": "An mdi: icon, e.g. mdi:pill. Blank = default.",
+          "persistent": "If true, requires acknowledgement via the built-in persistent notification system, same as send_notification's own \"persistent\" field.",
+          "home_only": "Only deliver to recipients whose assigned person entity is currently home.",
+          "target_recipients": "Restrict delivery to these recipients (by name), same as send_notification's own \"target_recipients\" field. Empty = consider all enabled recipients."
+        }
+      },
+      "manage_calendar": {
+        "title": "Manage calendar notifications",
+        "data": {
+          "calendar_notification": "Calendar notification"
+        }
+      },
+      "edit_calendar": {
+        "title": "Calendar notification",
+        "description": "Fires send_notification when the chosen calendar entity's event becomes active. A normal (timed) event fires as soon as it starts; an all-day event fires at \"All-day event time\" instead, since Home Assistant reports those active starting at midnight.",
+        "data": {
+          "name": "Name",
+          "calendar_entity": "Calendar entity",
+          "enabled": "Enabled",
+          "all_day_time": "All-day event time",
+          "title": "Title",
+          "message": "Message",
+          "icon": "Icon",
+          "channel": "Channel",
+          "importance": "Importance",
+          "persistent": "Persistent",
+          "home_only": "Home only",
+          "target_recipients": "Target recipients",
+          "remove": "Remove this calendar notification"
+        },
+        "data_description": {
+          "all_day_time": "Time of day (local time) an all-day event's notification fires at.",
+          "title": "Blank = use the calendar event's own summary.",
+          "message": "Blank = use the calendar event's own description (or summary, if it has no description).",
+          "icon": "An mdi: icon, e.g. mdi:calendar. Blank = default.",
           "persistent": "If true, requires acknowledgement via the built-in persistent notification system, same as send_notification's own \"persistent\" field.",
           "home_only": "Only deliver to recipients whose assigned person entity is currently home.",
           "target_recipients": "Restrict delivery to these recipients (by name), same as send_notification's own \"target_recipients\" field. Empty = consider all enabled recipients."

@@ -18,6 +18,7 @@ from .const import (
     DOMAIN,
     EVENT_NOTIFICATION,
 )
+from .calendar_scheduler import async_setup_calendar_notifications
 from .dispatch import (
     async_acknowledge,
     async_clear_inactive_live_recipients,
@@ -70,6 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_inactive = async_track_time_interval(hass, _on_check_inactive, INACTIVITY_CHECK_INTERVAL)
     unsub_persistent = async_register_persistent_notification_listener(hass, store)
     unsub_scheduled = async_setup_scheduled_notifications(hass, entry, store)
+    unsub_calendar = async_setup_calendar_notifications(hass, entry, store)
     unsub_options_update = entry.add_update_listener(_async_reload_entry)
 
     hass.data.setdefault(DOMAIN, {})
@@ -81,6 +83,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "unsub_inactive": unsub_inactive,
         "unsub_persistent": unsub_persistent,
         "unsub_scheduled": unsub_scheduled,
+        "unsub_calendar": unsub_calendar,
         "unsub_options_update": unsub_options_update,
     }
 
@@ -101,6 +104,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry_data["unsub_inactive"]()
         entry_data["unsub_persistent"]()
         entry_data["unsub_scheduled"]()
+        entry_data["unsub_calendar"]()
         entry_data["unsub_options_update"]()
     async_unregister_services(hass)
     return unload_ok

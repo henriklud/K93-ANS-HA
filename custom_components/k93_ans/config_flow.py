@@ -12,6 +12,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_CALENDAR_NOTIFICATIONS,
     CONF_CHANNELS,
     CONF_HISTORY_MAX_RECORDS,
     CONF_HISTORY_RETENTION_DAYS,
@@ -20,6 +21,7 @@ from .const import (
     CONF_RECIPIENTS,
     CONF_SCHEDULED_NOTIFICATIONS,
     CONF_STORAGE_PATH,
+    DEFAULT_ALL_DAY_TIME,
     DEFAULT_CHANNEL,
     DOMAIN,
     IMPORTANCE_LEVELS,
@@ -79,6 +81,7 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
                 "manage_recipients",
                 "manage_channels",
                 "manage_scheduled",
+                "manage_calendar",
                 "advanced",
                 "finish",
             ],
@@ -477,6 +480,151 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="edit_scheduled", data_schema=vol.Schema(schema_dict), errors=errors
+        )
+
+
+    async def async_step_manage_calendar(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Pick an existing calendar notification to edit, or add a new one."""
+        options = self._ensure_options()
+        calendar_notifications = options[CONF_CALENDAR_NOTIFICATIONS]
+
+        if user_input is not None:
+            self._editing_id = (
+                None if user_input["calendar_notification"] == ADD_NEW else user_input["calendar_notification"]
+            )
+            return await self.async_step_edit_calendar()
+
+        if not calendar_notifications:
+            self._editing_id = None
+            return await self.async_step_edit_calendar()
+
+        choices = [{"value": c["id"], "label": c["name"]} for c in calendar_notifications]
+        choices.append({"value": ADD_NEW, "label": "Add new calendar notification"})
+
+        return self.async_show_form(
+            step_id="manage_calendar",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("calendar_notification"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=choices, mode="dropdown")
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_calendar(
+        self, user_input: dict | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Add, edit or remove a single calendar notification."""
+        options = self._ensure_options()
+        calendar_list = options[CONF_CALENDAR_NOTIFICATIONS]
+        existing = next((c for c in calendar_list if c["id"] == self._editing_id), None)
+
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            if user_input.get("remove") and existing is not None:
+                options[CONF_CALENDAR_NOTIFICATIONS] = [
+                    c for c in calendar_list if c["id"] != existing["id"]
+                ]
+                await self._async_save()
+                return await self.async_step_init()
+
+            raw_channel = user_input.get("channel") or DEFAULT_CHANNEL
+            channel = raw_channel.strip().lower().replace(" ", "_")
+            item = {
+                "id": existing["id"] if existing else str(uuid.uuid4()),
+                "name": user_input["name"],
+                "enabled": user_input["enabled"],
+                "calendar_entity": user_input["calendar_entity"],
+                "all_day_time": user_input.get("all_day_time") or DEFAULT_ALL_DAY_TIME,
+                "title": user_input.get("title") or None,
+                "message": user_input.get("message") or None,
+                "icon": user_input.get("icon") or None,
+                "channel": channel,
+                "importance": user_input["importance"],
+                "persistent": user_input["persistent"],
+                "home_only": user_input["home_only"],
+                "target_recipients": user_input.get("target_recipients", []),
+            }
+            if existing:
+                options[CONF_CALENDAR_NOTIFICATIONS] = [
+                    item if c["id"] == existing["id"] else c for c in calendar_list
+                ]
+            else:
+                options[CONF_CALENDAR_NOTIFICATIONS] = [*calendar_list, item]
+
+            await self._async_save()
+            return await self.async_step_init()
+
+        channel_choices = [c["key"] for c in options[CONF_CHANNELS]]
+        recipient_choices = [r["name"] for r in options[CONF_RECIPIENTS]]
+
+        calendar_entity_key = (
+            vol.Required("calendar_entity", default=existing["calendar_entity"])
+            if existing
+            else vol.Required("calendar_entity")
+        )
+
+        schema_dict: dict[Any, Any] = {
+            vol.Required("name", default=existing["name"] if existing else ""): selector.TextSelector(),
+            calendar_entity_key: selector.EntitySelector(selector.EntitySelectorConfig(domain="calendar")),
+            vol.Optional(
+                "enabled", default=existing["enabled"] if existing else True
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                "all_day_time",
+                default=existing.get("all_day_time", DEFAULT_ALL_DAY_TIME)
+                if existing
+                else DEFAULT_ALL_DAY_TIME,
+            ): selector.TimeSelector(),
+            vol.Optional(
+                "title",
+                default="",
+                description={"suggested_value": (existing.get("title") if existing else None) or ""},
+            ): selector.TextSelector(),
+            vol.Optional(
+                "message",
+                default="",
+                description={"suggested_value": (existing.get("message") if existing else None) or ""},
+            ): selector.TextSelector(),
+            vol.Optional(
+                "icon",
+                default="",
+                description={"suggested_value": (existing.get("icon") if existing else None) or ""},
+            ): selector.TextSelector(),
+            vol.Optional(
+                "channel",
+                default=existing.get("channel", DEFAULT_CHANNEL) if existing else DEFAULT_CHANNEL,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(options=channel_choices, custom_value=True)
+            ),
+            vol.Optional(
+                "importance",
+                default=existing["importance"] if existing else "normal",
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=IMPORTANCE_LEVELS)),
+            vol.Optional(
+                "persistent", default=existing["persistent"] if existing else False
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                "home_only", default=existing["home_only"] if existing else False
+            ): selector.BooleanSelector(),
+            vol.Optional(
+                "target_recipients",
+                default=existing.get("target_recipients", []) if existing else [],
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=recipient_choices, multiple=True, custom_value=True
+                )
+            ),
+        }
+        if existing:
+            schema_dict[vol.Optional("remove", default=False)] = selector.BooleanSelector()
+
+        return self.async_show_form(
+            step_id="edit_calendar", data_schema=vol.Schema(schema_dict), errors=errors
         )
 
 

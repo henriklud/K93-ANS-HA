@@ -39,6 +39,8 @@ MAX_ACTIONS = 3
 CONF_RECIPIENTS = "recipients"
 CONF_CHANNELS = "channels"
 CONF_SCHEDULED_NOTIFICATIONS = "scheduled_notifications"
+CONF_CALENDAR_NOTIFICATIONS = "calendar_notifications"
+DEFAULT_ALL_DAY_TIME = "08:00:00"
 CONF_HISTORY_RETENTION_DAYS = "history_retention_days"
 CONF_HISTORY_MAX_RECORDS = "history_max_records"
 CONF_LANGUAGE = "language"
@@ -66,6 +68,7 @@ def default_options() -> dict:
     return {
         CONF_RECIPIENTS: [],
         CONF_SCHEDULED_NOTIFICATIONS: [],
+        CONF_CALENDAR_NOTIFICATIONS: [],
         CONF_CHANNELS: [
             {
                 "id": str(uuid.uuid4()),

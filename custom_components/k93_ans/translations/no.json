@@ -18,6 +18,7 @@
           "manage_recipients": "Administrer mottakere",
           "manage_channels": "Administrer kanaler",
           "manage_scheduled": "Administrer planlagte varsler",
+          "manage_calendar": "Administrer kalendervarsler",
           "advanced": "Avansert",
           "finish": "Ferdig"
         }
@@ -98,6 +99,40 @@
         "data_description": {
           "cron": "Standard 5-felts cron-syntaks. Evalueres i Home Assistants egen lokale tid.",
           "icon": "Et mdi:-ikon, f.eks. mdi:pill. Tom = standard.",
+          "persistent": "Hvis sann, kreves bekreftelse via det innebygde vedvarende varslingssystemet, samme som send_notifications eget \"persistent\"-felt.",
+          "home_only": "Lever kun til mottakere hvis tilknyttede personentitet for øyeblikket er hjemme.",
+          "target_recipients": "Begrens levering til disse mottakerne (etter navn), samme som send_notifications eget \"target_recipients\"-felt. Tom = vurder alle aktiverte mottakere."
+        }
+      },
+      "manage_calendar": {
+        "title": "Administrer kalendervarsler",
+        "data": {
+          "calendar_notification": "Kalendervarsel"
+        }
+      },
+      "edit_calendar": {
+        "title": "Kalendervarsel",
+        "description": "Sender send_notification når den valgte kalenderentitetens hendelse blir aktiv. En vanlig (tidsbestemt) hendelse sendes så snart den starter; en heldagshendelse sendes på \"Tidspunkt for heldagshendelse\" i stedet, siden Home Assistant rapporterer disse som aktive fra midnatt.",
+        "data": {
+          "name": "Navn",
+          "calendar_entity": "Kalenderentitet",
+          "enabled": "Aktivert",
+          "all_day_time": "Tidspunkt for heldagshendelse",
+          "title": "Tittel",
+          "message": "Melding",
+          "icon": "Ikon",
+          "channel": "Kanal",
+          "importance": "Viktighet",
+          "persistent": "Vedvarende",
+          "home_only": "Kun hjemme",
+          "target_recipients": "Målmottakere",
+          "remove": "Fjern dette kalendervarselet"
+        },
+        "data_description": {
+          "all_day_time": "Tidspunkt på dagen (lokal tid) en heldagshendelses varsel sendes på.",
+          "title": "Tom = bruk kalenderhendelsens eget sammendrag.",
+          "message": "Tom = bruk kalenderhendelsens egen beskrivelse (eller sammendrag, hvis den ikke har noen beskrivelse).",
+          "icon": "Et mdi:-ikon, f.eks. mdi:calendar. Tom = standard.",
           "persistent": "Hvis sann, kreves bekreftelse via det innebygde vedvarende varslingssystemet, samme som send_notifications eget \"persistent\"-felt.",
           "home_only": "Lever kun til mottakere hvis tilknyttede personentitet for øyeblikket er hjemme.",
           "target_recipients": "Begrens levering til disse mottakerne (etter navn), samme som send_notifications eget \"target_recipients\"-felt. Tom = vurder alle aktiverte mottakere."
