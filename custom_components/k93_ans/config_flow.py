@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
+from .config_snapshot import async_write_config_snapshot
 from .const import (
     CONF_CALENDAR_NOTIFICATIONS,
     CONF_CHANNELS,
@@ -70,9 +71,11 @@ class K93AnsOptionsFlow(config_entries.OptionsFlow):
         return self._options
 
     async def _async_save(self) -> None:
-        self.hass.config_entries.async_update_entry(
-            self.config_entry, options=self._ensure_options()
-        )
+        options = self._ensure_options()
+        self.hass.config_entries.async_update_entry(self.config_entry, options=options)
+        entry_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        if entry_data is not None:
+            await async_write_config_snapshot(self.hass, entry_data["store"], options)
 
 
     async def async_step_init(self, user_input: dict | None = None) -> config_entries.ConfigFlowResult:

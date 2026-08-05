@@ -247,6 +247,13 @@ class NotificationStore:
         self._notifications: list[NotificationRecord] = []
         self._pending_live: dict[str, tuple[str, str]] = {}
 
+    @property
+    def storage_dir(self) -> Path:
+        """The effective, already-resolved storage directory - see _resolve_storage_dir. Exposed
+        so other modules (e.g. config_snapshot.py) can write alongside database.db without
+        re-resolving storage_path themselves."""
+        return self._dir
+
 
     def _connect(self) -> sqlite3.Connection:
         """A fresh connection per call, not a shared one - sqlite3 connections aren't safe to use

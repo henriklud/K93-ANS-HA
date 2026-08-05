@@ -19,6 +19,7 @@ from .const import (
     EVENT_NOTIFICATION,
 )
 from .calendar_scheduler import async_setup_calendar_notifications
+from .config_snapshot import async_write_config_snapshot
 from .dispatch import (
     async_acknowledge,
     async_clear_inactive_live_recipients,
@@ -43,6 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up K93 ANS from a config entry."""
     store = NotificationStore(hass, entry.options.get(CONF_STORAGE_PATH))
     await store.async_load()
+    await async_write_config_snapshot(hass, store, entry.options)
     async_restore_persistent_notifications(hass, store)
 
     async def _on_notification_event(event: Event) -> None:

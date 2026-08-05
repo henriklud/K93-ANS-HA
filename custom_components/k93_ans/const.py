@@ -57,6 +57,8 @@ CUSTOM_STORAGE_FILENAME = "database.db"
 LEGACY_JSON_FILENAME = "database.json"
 LEGACY_JSON_FILENAME_ALT = "k93_ans_notifications.json"
 
+CONFIG_SNAPSHOT_FILENAME = "config.json"
+
 IMAGES_WEB_PATH_PREFIX = "/local/"
 
 SUPPORTED_LANGUAGES = ["en", "no"]
