@@ -9,14 +9,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_CHANNELS, CONF_RECIPIENTS, DOMAIN
+from .const import CONF_CHANNELS, CONF_RECIPIENTS, DOMAIN, SIGNAL_DELETED, SIGNAL_UPDATED
 from .models import NotificationRecord
 from .store import NotificationStore
-
-SCAN_INTERVAL = timedelta(minutes=15)
 
 
 async def async_setup_entry(
@@ -48,18 +47,19 @@ def _history_records(store: NotificationStore) -> list[NotificationRecord]:
 
 
 class K93AnsSensorBase(SensorEntity):
-    """Shared setup for K93 ANS diagnostic sensors: one device, polled every SCAN_INTERVAL.
+    """Shared setup for K93 ANS diagnostic sensors: one device, updated live - no polling.
 
-    Deliberately not pushed live on every notification event (see SCAN_INTERVAL above) - these
-    are diagnostic/volume indicators, not real-time counters, and a state recompute on every
-    single dispatch/ack/delete was unnecessary background load. Every sensor still gets one fresh
-    read as soon as it's added, which happens whenever the integration is set up - HA starting up
-    or an options-flow save reloading the entry - without needing anything extra here.
+    Not poll-based at all: native_value is computed fresh from the in-memory store/entry.options
+    on every read (see each sensor's own native_value), so there's nothing to periodically
+    recompute in the background - only the *pushed state write* needs triggering, which happens
+    on every notification event via SIGNAL_UPDATED/SIGNAL_DELETED (see dispatch.py), plus once
+    immediately when the sensor is added (HA starting up, or an options-flow save reloading the
+    entry). K93AnsDatabaseSizeSensor overrides _async_refresh to also re-stat its file first.
     """
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_should_poll = True
+    _attr_should_poll = False
 
     def __init__(self, entry: ConfigEntry, store: NotificationStore, key: str, name: str) -> None:
         self._entry = entry
@@ -73,6 +73,18 @@ class K93AnsSensorBase(SensorEntity):
             model="Advanced Notification System",
             entry_type=DeviceEntryType.SERVICE,
         )
+
+    async def async_added_to_hass(self) -> None:
+        await self._async_refresh()
+
+        async def _on_signal(*_args: Any) -> None:
+            await self._async_refresh()
+
+        self.async_on_remove(async_dispatcher_connect(self.hass, SIGNAL_UPDATED, _on_signal))
+        self.async_on_remove(async_dispatcher_connect(self.hass, SIGNAL_DELETED, _on_signal))
+
+    async def _async_refresh(self) -> None:
+        self.async_write_ha_state()
 
 
 class K93AnsChannelsSensor(K93AnsSensorBase):
@@ -228,8 +240,9 @@ class K93AnsDatabaseSizeSensor(K93AnsSensorBase):
         super().__init__(entry, store, "database_size", "Database size")
         self._size_bytes = 0
 
-    async def async_update(self) -> None:
+    async def _async_refresh(self) -> None:
         self._size_bytes = await self.hass.async_add_executor_job(self._store.file_size_bytes)
+        self.async_write_ha_state()
 
     @property
     def native_value(self) -> int:
