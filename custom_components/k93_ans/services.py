@@ -6,9 +6,11 @@ import uuid
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import dt as dt_util
 
+from .config_snapshot import async_restore_config_from_snapshot
 from .const import (
     ACK_ACTION_LABELS,
     ACK_ACTION_PREFIX,
@@ -31,6 +33,7 @@ SERVICE_ACKNOWLEDGE = "acknowledge"
 SERVICE_END_LIVE_NOTIFICATION = "end_live_notification"
 SERVICE_DELETE_NOTIFICATION = "delete_notification"
 SERVICE_CLEAR_HISTORY = "clear_history"
+SERVICE_RESTORE_CONFIG_FROM_SNAPSHOT = "restore_config_from_snapshot"
 
 ACKNOWLEDGE_SCHEMA = vol.Schema({vol.Required("notification_id"): cv.string})
 END_LIVE_NOTIFICATION_SCHEMA = vol.Schema({vol.Required("live_id"): cv.string})
@@ -38,6 +41,7 @@ DELETE_NOTIFICATION_SCHEMA = vol.Schema({vol.Required("notification_id"): cv.str
 CLEAR_HISTORY_SCHEMA = vol.Schema(
     {vol.Optional("include_unacknowledged", default=False): cv.boolean}
 )
+RESTORE_CONFIG_FROM_SNAPSHOT_SCHEMA = vol.Schema({vol.Required("confirm"): cv.boolean})
 
 ACTION_SCHEMA = vol.Schema(
     {
@@ -192,6 +196,14 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
         ids = store.async_history_ids(call.data["include_unacknowledged"])
         await async_delete_notifications(hass, store, ids)
 
+    async def handle_restore_config_from_snapshot(call: ServiceCall) -> None:
+        if not call.data["confirm"]:
+            raise ServiceValidationError(
+                "Set confirm: true to restore the config snapshot - this replaces the entire "
+                "current configuration."
+            )
+        await async_restore_config_from_snapshot(hass, entry, store)
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_SEND_NOTIFICATION,
@@ -222,6 +234,12 @@ def async_register_services(hass: HomeAssistant, entry: ConfigEntry, store: Noti
         handle_clear_history,
         schema=CLEAR_HISTORY_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RESTORE_CONFIG_FROM_SNAPSHOT,
+        handle_restore_config_from_snapshot,
+        schema=RESTORE_CONFIG_FROM_SNAPSHOT_SCHEMA,
+    )
 
 
 def async_unregister_services(hass: HomeAssistant) -> None:
@@ -230,4 +248,5 @@ def async_unregister_services(hass: HomeAssistant) -> None:
     hass.services.async_remove(DOMAIN, SERVICE_ACKNOWLEDGE)
     hass.services.async_remove(DOMAIN, SERVICE_END_LIVE_NOTIFICATION)
     hass.services.async_remove(DOMAIN, SERVICE_DELETE_NOTIFICATION)
+    hass.services.async_remove(DOMAIN, SERVICE_RESTORE_CONFIG_FROM_SNAPSHOT)
     hass.services.async_remove(DOMAIN, SERVICE_CLEAR_HISTORY)

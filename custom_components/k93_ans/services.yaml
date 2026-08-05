@@ -245,3 +245,25 @@ clear_history:
       default: false
       selector:
         boolean:
+
+restore_config_from_snapshot:
+  name: Restore config from snapshot
+  description: >-
+    Replaces the ENTIRE current configuration (recipients, channels,
+    scheduled and calendar notifications, Advanced settings) with the
+    contents of config.json - the backup snapshot K93 ANS writes
+    automatically alongside database.db on every Configure save. Intended
+    for recovery if the config entry itself is ever lost or corrupted, not
+    routine use. The integration reloads immediately afterward, same as
+    saving through Configure would.
+  fields:
+    confirm:
+      name: Confirm
+      description: >-
+        Must be set to true to actually perform the restore - a safety
+        check against calling this by accident, since it overwrites
+        everything currently configured.
+      required: true
+      default: false
+      selector:
+        boolean:
